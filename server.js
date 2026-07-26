@@ -64,7 +64,7 @@ app.use(
           "'self'",
           "http://localhost:*",
           "https://*.mongodb.net",
-          "ttps://jcisidimansour-brown.vercel.app"
+          "https://jcisidimansour-brown.vercel.app"
         ],
 
         frameSrc: [
