@@ -405,10 +405,10 @@ exports.suspendreMembre = async (req, res) => {
       });
     }
 
-    if (membre.status === 'banni') {
+    if (membre.status !== 'actif' && membre.status !== 'inactif') {
       return res.status(400).json({
         success: false,
-        message: 'Ce membre est déjà banni'
+        message: 'Ce membre ne peut pas être suspendu'
       });
     }
 
@@ -456,10 +456,10 @@ exports.reactiverMembre = async (req, res) => {
       });
     }
 
-    if (membre.status !== 'suspendu' && membre.status !== 'banni') {
+    if (membre.status !== 'suspendu' && membre.status !== 'inactif') {
       return res.status(400).json({
         success: false,
-        message: 'Ce membre n\'est pas suspendu ou banni'
+        message: 'Ce membre n\'est pas suspendu ou inactif'
       });
     }
 
