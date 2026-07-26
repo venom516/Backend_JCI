@@ -32,7 +32,7 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:", "blob:", "http://localhost:5000"],
       fontSrc: ["'self'", "data:"],
-      connectSrc: ["'self'", "http://localhost:*", "https://*.mongodb.net", "https://api-jcisidimansour.onrender.com"],
+      connectSrc: ["'self'", "http://localhost:*", "https://*.mongodb.net", "https://jcisidimansour-brown.vercel.app"],
       frameSrc: ["https://maps.google.com", "https://www.google.com", "https://www.facebook.com", "https://www.instagram.com", "https://www.youtube.com"],
     }
   }
