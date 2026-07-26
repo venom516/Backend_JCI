@@ -124,23 +124,27 @@ const iconValue = (svg, label, value) => `
 // TRANSPORTEUR NODEMAILER
 // ============================================================
 
+const EMAIL_PORT = parseInt(process.env.EMAIL_PORT) || 587;
+
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.EMAIL_PORT) || 587,
-  secure: false,
+  port: EMAIL_PORT,
+  secure: process.env.EMAIL_SECURE ? process.env.EMAIL_SECURE === 'true' : EMAIL_PORT === 465,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
   },
-  tls: { rejectUnauthorized: false }
+  tls: { rejectUnauthorized: false },
+  connectionTimeout: 20000,
+  socketTimeout: 30000,
+  greetingTimeout: 15000,
+  ...(process.env.EMAIL_DEBUG === 'true' && { logger: true, debug: true }),
 });
 
-transporter.verify((error, success) => {
-  if (error) {
-    console.error('Erreur de connexion email:', error);
-  } else {
-    console.log('Serveur email prêt');
-  }
+transporter.verify().then(() => {
+  console.log('✅ SMTP connecté');
+}).catch(() => {
+  console.log('⚠️ SMTP indisponible (les emails seront différés)');
 });
 
 // ============================================================
@@ -157,11 +161,11 @@ const sendEmail = async (to, subject, html, text) => {
       text: text || html
     };
     const info = await transporter.sendMail(mailOptions);
-    console.log('Email envoyé à', to);
+    console.log('✅ Email envoyé à', to);
     return info;
   } catch (error) {
-    console.error('Erreur envoi email:', error);
-    throw error;
+    console.error('❌ Erreur envoi email à', to, ':', error.message);
+    return null;
   }
 };
 
