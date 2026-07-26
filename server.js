@@ -23,20 +23,61 @@ const PORT = process.env.PORT || 5000;
 // Confiance proxy (nécessaire pour rate limiting derrière un proxy)
 app.set('trust proxy', 1);
 
-// Sécurité - Headers HTTP (CSP assoupli pour embeds sociaux)
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:", "blob:", "http://localhost:5000"],
-      fontSrc: ["'self'", "data:"],
-      connectSrc: ["'self'", "http://localhost:*", "https://*.mongodb.net", "https://jcisidimansour-brown.vercel.app"],
-      frameSrc: ["https://maps.google.com", "https://www.google.com", "https://www.facebook.com", "https://www.instagram.com", "https://www.youtube.com"],
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "'unsafe-eval'"
+        ],
+
+        styleSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "https://fonts.googleapis.com"
+        ],
+
+        styleSrcElem: [
+          "'self'",
+          "'unsafe-inline'",
+          "https://fonts.googleapis.com"
+        ],
+
+        fontSrc: [
+          "'self'",
+          "data:",
+          "https://fonts.gstatic.com"
+        ],
+
+        imgSrc: [
+          "'self'",
+          "data:",
+          "https:",
+          "blob:"
+        ],
+
+        connectSrc: [
+          "'self'",
+          "http://localhost:*",
+          "https://*.mongodb.net",
+          "ttps://jcisidimansour-brown.vercel.app"
+        ],
+
+        frameSrc: [
+          "'self'",
+          "https://www.facebook.com",
+          "https://www.instagram.com",
+          "https://www.youtube.com",
+          "https://maps.google.com"
+        ]
+      }
     }
-  }
-}));
+  })
+);
 
 // CORS - configuration stricte (AVANT rate limiting pour que les erreurs 429 aient les headers CORS)
 const corsOptions = {
