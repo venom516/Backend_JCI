@@ -1,4 +1,4 @@
-const { BrevoClient } = require('@getbrevo/brevo');
+const { Resend } = require('resend');
 const jwt = require('jsonwebtoken');
 const Membre = require('../models/Membre');
 const SiteConfig = require('../models/SiteConfig');
@@ -121,65 +121,54 @@ const iconValue = (svg, label, value) => `
 `;
 
 // ============================================================
-// CLIENT BREVO — API Transactionnelle
+// CLIENT RESEND — API Transactionnelle
 // ============================================================
 
-let brevoReady = false;
+let resendReady = false;
 
 console.log('');
-console.log('=== BREVO CONFIGURATION ===');
+console.log('=== RESEND CONFIGURATION ===');
 console.log('User configuré: ' + (process.env.EMAIL_USER ? 'oui' : 'non'));
 console.log('');
 
-const initBrevo = () => {
-  if (!process.env.EMAIL_USER) {
-    console.log('⚠️ EMAIL_USER non défini — emails désactivés');
+const initResend = () => {
+  if (!process.env.RESEND_KEY || !process.env.EMAIL_USER) {
+    console.log('⚠️ RESEND_KEY ou EMAIL_USER non défini — emails désactivés');
     return;
   }
 
-  brevoReady = true;
-  console.log('✅ Brevo API prêt');
+  resendReady = true;
+  console.log('✅ Resend API prêt');
 };
 
-initBrevo();
-
+initResend();
 
 // ============================================================
 // FONCTION PRINCIPALE D'ENVOI
 // ============================================================
 
 const sendEmail = async (to, subject, html, text) => {
-  if (!brevoReady) {
-    console.log('⏳ Brevo indisponible, email non envoyé à', to);
+  if (!resendReady) {
+    console.log('⏳ Resend indisponible, email non envoyé à', to);
     return null;
-
   }
 
-
   try {
-    const client = new BrevoClient({
-      apiKey: process.env.EMAIL_PASS,
-    });
-    await client.transactionalEmails.sendTransacEmail({
-      sender: { email: process.env.EMAIL_USER, name: 'JCI Sidi Mansour' },
-      to: [{ email: to }],
+    const resend = new Resend(process.env.RESEND_KEY);
+    await resend.emails.send({
+      from: `JCI Sidi Mansour <${process.env.EMAIL_USER}>`,
+      to: [to],
       subject: subject,
-      htmlContent: html || text,
-      textContent: text || html,
+      html: html || text,
+      text: text || html,
     });
     console.log('📧 Email envoyé avec succès à', to);
     return true;
 
-
-  } catch(error) {
-
-
+  } catch (error) {
     console.log("❌ Erreur envoi email :", error.message);
-
     return false;
-
   }
-
 };
 
 // ============================================================
