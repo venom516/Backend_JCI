@@ -21,6 +21,28 @@ const role = {
     next();
   },
 
+  // Vérifier si l'utilisateur est VPFD
+  isVPFD: (req, res, next) => {
+    if (req.userRole !== 'VPFD' && req.userRole !== 'President') {
+      return res.status(403).json({
+        success: false,
+        message: 'Accès refusé. Seul le VPFD peut effectuer cette action.'
+      });
+    }
+    next();
+  },
+
+  // Vérifier si l'utilisateur est VPPRE
+  isVPPRE: (req, res, next) => {
+    if (req.userRole !== 'VPPRE' && req.userRole !== 'President') {
+      return res.status(403).json({
+        success: false,
+        message: 'Accès refusé. Seul le VPPRE peut effectuer cette action.'
+      });
+    }
+    next();
+  },
+
   // Vérifier si l'utilisateur est Conseiller Media
   isConseillerMedia: (req, res, next) => {
     if (req.userRole !== 'ConseillerMedia' && req.userRole !== 'President') {

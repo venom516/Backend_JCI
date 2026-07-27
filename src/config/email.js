@@ -121,90 +121,47 @@ const iconValue = (svg, label, value) => `
 `;
 
 // ============================================================
-// TRANSPORTEUR NODEMAILER — Configuration automatique
+// TRANSPORTEUR NODEMAILER — Gmail 465 SSL uniquement
 // ============================================================
 
 let transporter = null;
-let transporterReady = false;
+let smtpReady = false;
 
-const SMTP_TIMEOUT = 25000;
-
-const tryConnect = async (config) => {
-  const t = nodemailer.createTransport({
-    host: config.host,
-    port: config.port,
-    secure: config.secure,
-    auth: { user: config.user, pass: config.pass },
-    tls: { rejectUnauthorized: false },
-    connectionTimeout: SMTP_TIMEOUT,
-    socketTimeout: SMTP_TIMEOUT,
-    greetingTimeout: 15000,
-  });
-  await t.verify();
-  return t;
-};
-
-const testConfigs = async () => {
-  const candidates = [];
-
-  // 1. Gmail (depuis .env)
-  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-    const preferredPort = parseInt(process.env.EMAIL_PORT);
-    const preferredSecure = process.env.EMAIL_SECURE === 'true';
-    if (preferredPort) {
-      candidates.push({
-        label: `Gmail (port ${preferredPort} tel que configuré)`,
-        host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-        port: preferredPort,
-        secure: preferredSecure,
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      });
-    }
-    candidates.push(
-      { label: 'Gmail 587 STARTTLS', host: 'smtp.gmail.com', port: 587, secure: false, user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-      { label: 'Gmail 465 SSL',      host: 'smtp.gmail.com', port: 465, secure: true,  user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-    );
-  }
-
-  // 2. Brevo (fallback si variables BREVO_* présentes)
-  const brevoUser = process.env.BREVO_USER || process.env.EMAIL_USER;
-  const brevoKey  = process.env.BREVO_KEY  || process.env.EMAIL_PASS;
-  if (brevoUser && brevoKey) {
-    candidates.push(
-      { label: 'Brevo 587 STARTTLS', host: 'smtp-relay.brevo.com', port: 587, secure: false, user: brevoUser, pass: brevoKey },
-    );
-  }
-
-  for (const c of candidates) {
-    try {
-      const t = await tryConnect(c);
-      console.log(`✅ SMTP connecté via ${c.label}`);
-      return t;
-    } catch (err) {
-      console.log(`  ⚠️  ${c.label} → ${err.message}`);
-    }
-  }
-  return null;
-};
-
-// Initialisation asynchrone — ne bloque jamais le démarrage
-(async () => {
+const initSMTP = async () => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     console.log('⚠️ EMAIL_USER ou EMAIL_PASS non définis — emails désactivés');
     return;
   }
 
-  console.log('🔌 Test des configurations SMTP…');
-  const t = await testConfigs();
-  if (t) {
-    transporter = t;
-    transporterReady = true;
-  } else {
-    console.log('❌ Aucune configuration SMTP valide — les emails seront différés');
-    // Crée un transporteur factice pour ne pas planter sur sendMail()
+  transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+    tls: { rejectUnauthorized: false },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
+  });
+
+  try {
+    await transporter.verify();
+    smtpReady = true;
+    console.log('✅ SMTP connecté via Gmail 465 SSL');
+  } catch (err) {
+    smtpReady = false;
+    console.log('❌ SMTP indisponible');
+    console.error('  Détail:', err.message);
     transporter = nodemailer.createTransport({ jsonTransport: true });
   }
+};
+
+// Initialisation asynchrone — ne bloque jamais le démarrage
+(async () => {
+  await initSMTP();
 })();
 
 // ============================================================
@@ -212,8 +169,8 @@ const testConfigs = async () => {
 // ============================================================
 
 const sendEmail = async (to, subject, html, text) => {
-  if (!transporter) {
-    console.log('⏳ Transporteur SMTP pas encore prêt, email différé pour', to);
+  if (!smtpReady) {
+    console.log('⏳ SMTP pas encore prêt, email différé pour', to);
     return null;
   }
   try {
