@@ -127,18 +127,23 @@ const iconValue = (svg, label, value) => `
 let transporter = null;
 let smtpReady = false;
 
-console.log(`📧 EMAIL_USER configuré : ${process.env.EMAIL_USER ? 'oui' : 'non'}`);
+console.log('');
+console.log('=== SMTP CONFIGURATION ===');
+console.log('Host: ' + (process.env.EMAIL_HOST || 'non défini'));
+console.log('Port: ' + (process.env.EMAIL_PORT || 'non défini'));
+console.log('User configuré: ' + (process.env.EMAIL_USER ? 'oui' : 'non'));
+console.log('');
 
 const initSMTP = () => {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.log('⚠️ EMAIL_USER ou EMAIL_PASS non définis — emails désactivés');
+  if (!process.env.EMAIL_HOST || !process.env.EMAIL_PORT || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.log('⚠️ Variables SMTP incomplètes — emails désactivés');
     return;
   }
 
   transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'smtp-relay.brevo.com',
-    port: Number(process.env.EMAIL_PORT) || 587,
-    secure: false,
+    host: process.env.EMAIL_HOST,
+    port: Number(process.env.EMAIL_PORT),
+    secure: Number(process.env.EMAIL_PORT) === 465,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
@@ -156,8 +161,8 @@ const initSMTP = () => {
     .catch((err) => {
       smtpReady = false;
       console.log('❌ SMTP indisponible');
-      console.log('  host: ' + (process.env.EMAIL_HOST || 'smtp-relay.brevo.com'));
-      console.log('  port: ' + (Number(process.env.EMAIL_PORT) || 587));
+      console.log('  host: ' + process.env.EMAIL_HOST);
+      console.log('  port: ' + process.env.EMAIL_PORT);
       console.log('  code: ' + (err.code || 'N/A'));
       console.log('  message: ' + (err.message || err));
       transporter = nodemailer.createTransport({ jsonTransport: true });
@@ -173,7 +178,7 @@ initSMTP();
 
 const sendEmail = async (to, subject, html, text) => {
   if (!smtpReady) {
-    console.log('⏳ SMTP pas encore prêt, email différé pour', to);
+    console.log('⏳ SMTP indisponible, email non envoyé à', to);
     return null;
   }
   try {
@@ -184,11 +189,11 @@ const sendEmail = async (to, subject, html, text) => {
       html: html || text,
       text: text || html
     };
-    const info = await transporter.sendMail(mailOptions);
+    await transporter.sendMail(mailOptions);
     console.log('📧 Email envoyé avec succès à', to);
-    return info;
+    return true;
   } catch (error) {
-    console.error('❌ Échec envoi email à', to, ':', error.message);
+    console.log('❌ Erreur envoi email à', to, ':', error.message);
     return null;
   }
 };
