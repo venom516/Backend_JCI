@@ -13,6 +13,7 @@ const {
   sendValidationConfirmationToPresident,
   sendInterviewEmail,
   sendRejectionEmail,
+  sendValidationAccepteeEmail,
   sendSuspensionEmail,
   sendReactivationEmail
 } = require('../config/email');
@@ -745,10 +746,10 @@ exports.deleteRole = async (req, res) => {
 
     const { role } = req.params;
 
-    if (role === 'Admin' || role === 'Membre') {
+    if (role === 'Membre') {
       return res.status(400).json({
         success: false,
-        message: 'Impossible de supprimer les rôles Admin ou Membre'
+        message: 'Impossible de supprimer le rôle Membre'
       });
     }
 
@@ -878,6 +879,47 @@ exports.getParrainList = async (req, res) => {
 };
 
 // ============================================================
+// VALIDER UNE INSCRIPTION DIRECTEMENT (Président) - sans entretien
+// ============================================================
+exports.validerInscriptionDirect = async (req, res) => {
+  try {
+    const membre = await Membre.findById(req.params.id);
+    if (!membre) {
+      return res.status(404).json({
+        success: false,
+        message: 'Membre non trouvé'
+      });
+    }
+
+    if (membre.status !== 'en-attente' && membre.status !== 'non-validé') {
+      return res.status(400).json({
+        success: false,
+        message: 'Ce membre n\'est pas en attente de validation'
+      });
+    }
+
+    membre.status = 'actif';
+    await membre.save();
+
+    await sendValidationAccepteeEmail(membre);
+    console.log(`📧 Email validation acceptée envoyé à ${membre.email}`);
+
+    return res.json({
+      success: true,
+      message: '✅ Inscription validée avec succès',
+      data: membre
+    });
+  } catch (error) {
+    console.error('❌ Erreur validerInscriptionDirect:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur',
+      error: error.message
+    });
+  }
+};
+
+// ============================================================
 // ACCEPTER UN MEMBRE (Président) - avec date d'entretien
 // ============================================================
 exports.acceptMember = async (req, res) => {
@@ -958,7 +1000,7 @@ exports.rejectMember = async (req, res) => {
       });
     }
 
-    if (membre.status !== 'en-attente') {
+    if (membre.status !== 'en-attente' && membre.status !== 'non-validé') {
       return res.status(400).json({
         success: false,
         message: 'Ce membre n\'est pas en attente de validation'

@@ -20,6 +20,7 @@ const {
   getBureauMembers,
   acceptMember,
   rejectMember,
+  validerInscriptionDirect,
   getParrainList,
   createRole
 } = require('../controllers/membreController');
@@ -76,7 +77,10 @@ router.put('/:id/validate', auth, role.hasRole(['Admin', 'President']), validate
 // PUT - Accepter un membre (Président) avec date d'entretien
 router.put('/:id/accept', auth, role.isPresident, validateObjectId, acceptMember);
 
-// PUT - Rejeter un membre (Président) - supprime de la base
+// PUT - Valider une inscription directement (Président) - sans entretien
+router.put('/:id/valider', auth, role.isPresident, validateObjectId, validerInscriptionDirect);
+
+// PUT - Rejeter un membre (Président)
 router.put('/:id/reject', auth, role.isPresident, validateObjectId, rejectMember);
 
 // PUT - Suspendre un membre
