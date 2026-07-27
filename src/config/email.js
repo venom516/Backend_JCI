@@ -126,69 +126,46 @@ const iconValue = (svg, label, value) => `
 
 let transporter = null;
 let smtpReady = false;
-let initAttempts = 0;
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 5000;
-
-const SMTP_HOST = process.env.EMAIL_HOST || 'smtp-relay.brevo.com';
-const SMTP_PORT = Number(process.env.EMAIL_PORT) || 587;
-const SMTP_SECURE = process.env.EMAIL_SECURE === 'true';
 
 console.log(`📧 EMAIL_USER configuré : ${process.env.EMAIL_USER ? 'oui' : 'non'}`);
-console.log(`📧 SMTP_HOST: ${SMTP_HOST}, SMTP_PORT: ${SMTP_PORT}, SMTP_SECURE: ${SMTP_SECURE}`);
 
-const createTransporter = () => nodemailer.createTransport({
-  host: SMTP_HOST,
-  port: SMTP_PORT,
-  secure: SMTP_SECURE,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  tls: { rejectUnauthorized: false },
-  connectionTimeout: 30000,
-  greetingTimeout: 30000,
-  socketTimeout: 30000,
-});
-
-const initSMTP = async () => {
+const initSMTP = () => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     console.log('⚠️ EMAIL_USER ou EMAIL_PASS non définis — emails désactivés');
     return;
   }
 
-  transporter = createTransporter();
+  transporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || 'smtp-relay.brevo.com',
+    port: Number(process.env.EMAIL_PORT) || 587,
+    secure: false,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 30000,
+  });
 
-  try {
-    await transporter.verify();
-    smtpReady = true;
-    initAttempts = 0;
-    console.log('✅ SMTP connecté');
-  } catch (err) {
-    smtpReady = false;
-    initAttempts++;
-    console.log('❌ SMTP indisponible (tentative ' + initAttempts + '/' + MAX_RETRIES + ')');
-    console.log('  host: ' + SMTP_HOST);
-    console.log('  port: ' + SMTP_PORT);
-    console.log('  secure: ' + SMTP_SECURE);
-    console.log('  code: ' + (err.code || 'N/A'));
-    console.log('  message: ' + (err.message || err));
-
-    if (initAttempts < MAX_RETRIES) {
-      console.log(`🔄 Nouvelle tentative dans ${RETRY_DELAY / 1000}s...`);
-      await new Promise(r => setTimeout(r, RETRY_DELAY));
-      await initSMTP();
-    } else {
-      console.log('❌ SMTP définitivement indisponible après ' + MAX_RETRIES + ' tentatives');
+  transporter.verify()
+    .then(() => {
+      smtpReady = true;
+      console.log('✅ SMTP connecté');
+    })
+    .catch((err) => {
+      smtpReady = false;
+      console.log('❌ SMTP indisponible');
+      console.log('  host: ' + (process.env.EMAIL_HOST || 'smtp-relay.brevo.com'));
+      console.log('  port: ' + (Number(process.env.EMAIL_PORT) || 587));
+      console.log('  code: ' + (err.code || 'N/A'));
+      console.log('  message: ' + (err.message || err));
       transporter = nodemailer.createTransport({ jsonTransport: true });
-    }
-  }
+    });
 };
 
-// Initialisation asynchrone — ne bloque jamais le démarrage
-(async () => {
-  await initSMTP();
-})();
+// Initialisation au démarrage — ne bloque jamais le serveur
+initSMTP();
 
 // ============================================================
 // FONCTION PRINCIPALE D'ENVOI
