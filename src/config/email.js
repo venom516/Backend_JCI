@@ -127,50 +127,54 @@ const iconValue = (svg, label, value) => `
 let transporter = null;
 let smtpReady = false;
 
-console.log('');
-console.log('=== SMTP CONFIGURATION ===');
-console.log('Host: ' + (process.env.EMAIL_HOST || 'non défini'));
-console.log('Port: ' + (process.env.EMAIL_PORT || 'non défini'));
-console.log('User configuré: ' + (process.env.EMAIL_USER ? 'oui' : 'non'));
-console.log('');
+const initSMTP = async () => {
 
-const initSMTP = () => {
-  if (!process.env.EMAIL_HOST || !process.env.EMAIL_PORT || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.log('⚠️ Variables SMTP incomplètes — emails désactivés');
-    return;
-  }
+  console.log("📧 Initialisation SMTP...");
 
   transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false
-  },
-  connectionTimeout: 60000,
-  greetingTimeout: 60000,
-  socketTimeout: 60000
-});
 
-  transporter.verify()
-    .then(() => {
-      smtpReady = true;
-      console.log('✅ SMTP connecté');
-    })
-    .catch((err) => {
-      smtpReady = false;
-      console.log('❌ SMTP indisponible');
-      console.log('  host: ' + process.env.EMAIL_HOST);
-      console.log('  port: ' + process.env.EMAIL_PORT);
-      console.log('  code: ' + (err.code || 'N/A'));
-      console.log('  message: ' + (err.message || err));
-      transporter = nodemailer.createTransport({ jsonTransport: true });
-    });
+    service: "gmail",
+
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    },
+
+    tls: {
+      rejectUnauthorized: false
+    },
+
+    connectionTimeout: 60000,
+    greetingTimeout: 60000,
+    socketTimeout: 60000
+
+  });
+
+
+  try {
+
+    await transporter.verify();
+
+    smtpReady = true;
+
+    console.log("✅ SMTP Gmail connecté avec succès");
+
+
+  } catch(error) {
+
+
+    smtpReady = false;
+
+
+    console.log("❌ SMTP Gmail indisponible");
+    console.log("Erreur :", error.message);
+
+
+  }
+
 };
 
-// Initialisation au démarrage — ne bloque jamais le serveur
+
 initSMTP();
 
 // ============================================================
@@ -178,25 +182,47 @@ initSMTP();
 // ============================================================
 
 const sendEmail = async (to, subject, html, text) => {
-  if (!smtpReady) {
-    console.log('⏳ SMTP indisponible, email non envoyé à', to);
-    return null;
+
+  if (!transporter || !smtpReady) {
+
+    console.log("⏳ SMTP non prêt, email différé :", to);
+
+    return false;
+
   }
+
+
   try {
-    const mailOptions = {
+
+    await transporter.sendMail({
+
       from: `"JCI Sidi Mansour" <${process.env.EMAIL_USER}>`,
-      to,
-      subject,
-      html: html || text,
-      text: text || html
-    };
-    await transporter.sendMail(mailOptions);
-    console.log('📧 Email envoyé avec succès à', to);
+
+      to: to,
+
+      subject: subject,
+
+      html: html,
+
+      text: text || ""
+
+    });
+
+
+    console.log("📧 Email envoyé :", to);
+
     return true;
-  } catch (error) {
-    console.log('❌ Erreur envoi email à', to, ':', error.message);
-    return null;
+
+
+  } catch(error) {
+
+
+    console.log("❌ Erreur envoi email :", error.message);
+
+    return false;
+
   }
+
 };
 
 // ============================================================
