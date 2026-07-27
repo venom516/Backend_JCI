@@ -126,6 +126,25 @@ const iconValue = (svg, label, value) => `
 
 let transporter = null;
 let smtpReady = false;
+let initAttempts = 0;
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 5000;
+
+console.log(`📧 EMAIL_USER configuré : ${process.env.EMAIL_USER ? 'oui' : 'non'}`);
+
+const createTransporter = () => nodemailer.createTransport({
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+  tls: { rejectUnauthorized: false },
+  connectionTimeout: 30000,
+  greetingTimeout: 30000,
+  socketTimeout: 30000,
+});
 
 const initSMTP = async () => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
@@ -133,29 +152,31 @@ const initSMTP = async () => {
     return;
   }
 
-  transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-    tls: { rejectUnauthorized: false },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
-  });
+  transporter = createTransporter();
 
   try {
     await transporter.verify();
     smtpReady = true;
+    initAttempts = 0;
     console.log('✅ SMTP connecté via Gmail 465 SSL');
   } catch (err) {
     smtpReady = false;
-    console.log('❌ SMTP indisponible');
-    console.error('  Détail:', err.message);
-    transporter = nodemailer.createTransport({ jsonTransport: true });
+    initAttempts++;
+    console.log('❌ SMTP indisponible (tentative ' + initAttempts + '/' + MAX_RETRIES + ')');
+    console.log('  host: smtp.gmail.com');
+    console.log('  port: 465');
+    console.log('  secure: true');
+    console.log('  code: ' + (err.code || 'N/A'));
+    console.log('  message: ' + (err.message || err));
+
+    if (initAttempts < MAX_RETRIES) {
+      console.log(`🔄 Nouvelle tentative dans ${RETRY_DELAY / 1000}s...`);
+      await new Promise(r => setTimeout(r, RETRY_DELAY));
+      await initSMTP();
+    } else {
+      console.log('❌ SMTP définitivement indisponible après ' + MAX_RETRIES + ' tentatives');
+      transporter = nodemailer.createTransport({ jsonTransport: true });
+    }
   }
 };
 
