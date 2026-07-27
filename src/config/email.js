@@ -121,7 +121,7 @@ const iconValue = (svg, label, value) => `
 `;
 
 // ============================================================
-// TRANSPORTEUR NODEMAILER — Gmail 465 SSL uniquement
+// TRANSPORTEUR NODEMAILER — Configuration via variables d'environnement
 // ============================================================
 
 let transporter = null;
@@ -130,12 +130,17 @@ let initAttempts = 0;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 5000;
 
+const SMTP_HOST = process.env.EMAIL_HOST || 'smtp-relay.brevo.com';
+const SMTP_PORT = Number(process.env.EMAIL_PORT) || 587;
+const SMTP_SECURE = process.env.EMAIL_SECURE === 'true';
+
 console.log(`📧 EMAIL_USER configuré : ${process.env.EMAIL_USER ? 'oui' : 'non'}`);
+console.log(`📧 SMTP_HOST: ${SMTP_HOST}, SMTP_PORT: ${SMTP_PORT}, SMTP_SECURE: ${SMTP_SECURE}`);
 
 const createTransporter = () => nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
+  host: SMTP_HOST,
+  port: SMTP_PORT,
+  secure: SMTP_SECURE,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
@@ -158,14 +163,14 @@ const initSMTP = async () => {
     await transporter.verify();
     smtpReady = true;
     initAttempts = 0;
-    console.log('✅ SMTP connecté via Gmail 465 SSL');
+    console.log('✅ SMTP connecté');
   } catch (err) {
     smtpReady = false;
     initAttempts++;
     console.log('❌ SMTP indisponible (tentative ' + initAttempts + '/' + MAX_RETRIES + ')');
-    console.log('  host: smtp.gmail.com');
-    console.log('  port: 465');
-    console.log('  secure: true');
+    console.log('  host: ' + SMTP_HOST);
+    console.log('  port: ' + SMTP_PORT);
+    console.log('  secure: ' + SMTP_SECURE);
     console.log('  code: ' + (err.code || 'N/A'));
     console.log('  message: ' + (err.message || err));
 
@@ -203,10 +208,10 @@ const sendEmail = async (to, subject, html, text) => {
       text: text || html
     };
     const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Email envoyé à', to);
+    console.log('📧 Email envoyé avec succès à', to);
     return info;
   } catch (error) {
-    console.error('❌ Erreur envoi email à', to, ':', error.message);
+    console.error('❌ Échec envoi email à', to, ':', error.message);
     return null;
   }
 };
