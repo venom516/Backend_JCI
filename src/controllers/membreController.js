@@ -169,8 +169,25 @@ exports.updateMembre = async (req, res) => {
       });
     }
 
-    // Vérifier unicité du rôle si c'est un rôle unique
-    if (req.body.role && UNIQUE_ROLES.includes(req.body.role)) {
+    // Rotation automatique des rôles Président
+    if (req.body.role === 'President' && req.body.role !== membre.role) {
+      const oldPresident = await Membre.findOne({ role: 'President', _id: { $ne: req.params.id }, status: { $ne: 'refusé' } });
+      const oldPPI = await Membre.findOne({ role: 'PPI', status: { $ne: 'refusé' } });
+      if (oldPPI) {
+        oldPPI.role = 'PP';
+        oldPPI.datePriseFonction = new Date();
+        oldPPI.mandatAnnee = new Date().getFullYear() - 2;
+        await oldPPI.save();
+      }
+      if (oldPresident) {
+        oldPresident.role = 'PPI';
+        oldPresident.datePriseFonction = new Date();
+        oldPresident.mandatAnnee = new Date().getFullYear() - 1;
+        await oldPresident.save();
+      }
+      req.body.mandatAnnee = new Date().getFullYear();
+      req.body.datePriseFonction = new Date();
+    } else if (req.body.role && UNIQUE_ROLES.includes(req.body.role) && req.body.role !== 'President') {
       const roleHolder = await Membre.findOne({ role: req.body.role, _id: { $ne: req.params.id }, status: { $ne: 'refusé' } });
       if (roleHolder) {
         return res.status(400).json({
@@ -178,11 +195,6 @@ exports.updateMembre = async (req, res) => {
           message: 'Ce rôle est déjà attribué à un autre membre. Veuillez d\'abord le retirer avant de l\'attribuer à une nouvelle personne.'
         });
       }
-    }
-
-    // Si nouveau rôle President, définir mandatAnnee
-    if (req.body.role === 'President' && req.body.role !== membre.role) {
-      req.body.mandatAnnee = new Date().getFullYear();
     }
 
     // Si changement de statut (seul l'Admin ou le Président peut le faire)
@@ -224,6 +236,19 @@ exports.updateMembre = async (req, res) => {
         updateData,
         { new: true, runValidators: true }
       ).select('-password -codeValidation -codeValidationExpire');
+    }
+
+    // Vérification Sénateur automatique
+    if (updated && updated.dateNaissance) {
+      const birthDate = new Date(updated.dateNaissance);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
+      if (age >= 40 && updated.role !== 'Sénateur') {
+        await Membre.findByIdAndUpdate(updated._id, { role: 'Sénateur' });
+        updated.role = 'Sénateur';
+      }
     }
 
     // Si email changé - Envoyer email de vérification + suspenser le compte

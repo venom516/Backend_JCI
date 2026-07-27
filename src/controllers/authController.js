@@ -397,6 +397,18 @@ exports.login = async (req, res) => {
       }
     }
 
+    // ✅ Vérification Sénateur automatique
+    if (membre.dateNaissance) {
+      const birthDate = new Date(membre.dateNaissance);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
+      if (age >= 40 && membre.role !== 'Sénateur') {
+        membre.role = 'Sénateur';
+      }
+    }
+
     membre.lastLogin = new Date();
     await membre.save();
 
