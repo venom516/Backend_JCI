@@ -126,6 +126,7 @@ const iconValue = (svg, label, value) => `
 
 let brevoReady = false;
 
+<<<<<<< HEAD
 console.log('');
 console.log('=== BREVO CONFIGURATION ===');
 console.log('User configuré: ' + (process.env.EMAIL_USER ? 'oui' : 'non'));
@@ -142,17 +143,85 @@ const initBrevo = () => {
 };
 
 initBrevo();
+=======
+const initSMTP = async () => {
+
+  console.log("📧 Initialisation SMTP...");
+
+  transporter = nodemailer.createTransport({
+
+  host: process.env.EMAIL_HOST || "smtp.gmail.com",
+
+  port: 465,
+
+  secure: true, // obligatoire avec 465
+
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  },
+
+  tls: {
+    rejectUnauthorized: false
+  },
+
+  connectionTimeout: 60000,
+  greetingTimeout: 60000,
+  socketTimeout: 60000
+
+});
+
+
+  try {
+
+    await transporter.verify();
+
+    smtpReady = true;
+
+    console.log("✅ SMTP Gmail connecté avec succès");
+
+
+  } catch(error) {
+
+
+    smtpReady = false;
+
+
+    console.log("❌ SMTP Gmail indisponible");
+    console.log("Erreur :", error.message);
+
+
+  }
+
+};
+
+
+initSMTP();
+>>>>>>> 6c8dbb1e74ef4e87a64e21544dc805d26bcea30c
 
 // ============================================================
 // FONCTION PRINCIPALE D'ENVOI
 // ============================================================
 
 const sendEmail = async (to, subject, html, text) => {
+<<<<<<< HEAD
   if (!brevoReady) {
     console.log('⏳ Brevo indisponible, email non envoyé à', to);
     return null;
+=======
+
+  if (!transporter || !smtpReady) {
+
+    console.log("⏳ SMTP non prêt, email différé :", to);
+
+    return false;
+
+>>>>>>> 6c8dbb1e74ef4e87a64e21544dc805d26bcea30c
   }
+
+
   try {
+<<<<<<< HEAD
     const client = new BrevoClient({
       apiKey: process.env.EMAIL_PASS,
     });
@@ -164,11 +233,38 @@ const sendEmail = async (to, subject, html, text) => {
       textContent: text || html,
     });
     console.log('📧 Email envoyé avec succès à', to);
+=======
+
+    await transporter.sendMail({
+
+      from: `"JCI Sidi Mansour" <${process.env.EMAIL_USER}>`,
+
+      to: to,
+
+      subject: subject,
+
+      html: html,
+
+      text: text || ""
+
+    });
+
+
+    console.log("📧 Email envoyé :", to);
+
+>>>>>>> 6c8dbb1e74ef4e87a64e21544dc805d26bcea30c
     return true;
-  } catch (error) {
-    console.log('❌ Erreur envoi email à', to, ':', error.message);
-    return null;
+
+
+  } catch(error) {
+
+
+    console.log("❌ Erreur envoi email :", error.message);
+
+    return false;
+
   }
+
 };
 
 // ============================================================
