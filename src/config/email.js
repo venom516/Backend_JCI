@@ -1,4 +1,4 @@
-const nodemailer = require('nodemailer');
+const { BrevoClient } = require('@getbrevo/brevo');
 const jwt = require('jsonwebtoken');
 const Membre = require('../models/Membre');
 const SiteConfig = require('../models/SiteConfig');
@@ -121,75 +121,48 @@ const iconValue = (svg, label, value) => `
 `;
 
 // ============================================================
-// TRANSPORTEUR NODEMAILER — Configuration via variables d'environnement
+// CLIENT BREVO — API Transactionnelle
 // ============================================================
 
-let transporter = null;
-let smtpReady = false;
+let brevoReady = false;
 
 console.log('');
-console.log('=== SMTP CONFIGURATION ===');
-console.log('Host: ' + (process.env.EMAIL_HOST || 'non défini'));
-console.log('Port: ' + (process.env.EMAIL_PORT || 'non défini'));
+console.log('=== BREVO CONFIGURATION ===');
 console.log('User configuré: ' + (process.env.EMAIL_USER ? 'oui' : 'non'));
 console.log('');
 
-const initSMTP = () => {
-  if (!process.env.EMAIL_HOST || !process.env.EMAIL_PORT || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.log('⚠️ Variables SMTP incomplètes — emails désactivés');
+const initBrevo = () => {
+  if (!process.env.EMAIL_USER) {
+    console.log('⚠️ EMAIL_USER non défini — emails désactivés');
     return;
   }
 
-  transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: Number(process.env.EMAIL_PORT),
-    secure: Number(process.env.EMAIL_PORT) === 465,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-    connectionTimeout: 30000,
-    greetingTimeout: 30000,
-    socketTimeout: 30000,
-  });
-
-  transporter.verify()
-    .then(() => {
-      smtpReady = true;
-      console.log('✅ SMTP connecté');
-    })
-    .catch((err) => {
-      smtpReady = false;
-      console.log('❌ SMTP indisponible');
-      console.log('  host: ' + process.env.EMAIL_HOST);
-      console.log('  port: ' + process.env.EMAIL_PORT);
-      console.log('  code: ' + (err.code || 'N/A'));
-      console.log('  message: ' + (err.message || err));
-      transporter = nodemailer.createTransport({ jsonTransport: true });
-    });
+  brevoReady = true;
+  console.log('✅ Brevo API prêt');
 };
 
-// Initialisation au démarrage — ne bloque jamais le serveur
-initSMTP();
+initBrevo();
 
 // ============================================================
 // FONCTION PRINCIPALE D'ENVOI
 // ============================================================
 
 const sendEmail = async (to, subject, html, text) => {
-  if (!smtpReady) {
-    console.log('⏳ SMTP indisponible, email non envoyé à', to);
+  if (!brevoReady) {
+    console.log('⏳ Brevo indisponible, email non envoyé à', to);
     return null;
   }
   try {
-    const mailOptions = {
-      from: `"JCI Sidi Mansour" <${process.env.EMAIL_USER}>`,
-      to,
-      subject,
-      html: html || text,
-      text: text || html
-    };
-    await transporter.sendMail(mailOptions);
+    const client = new BrevoClient({
+      apiKey: process.env.EMAIL_PASS,
+    });
+    await client.transactionalEmails.sendTransacEmail({
+      sender: { email: process.env.EMAIL_USER, name: 'JCI Sidi Mansour' },
+      to: [{ email: to }],
+      subject: subject,
+      htmlContent: html || text,
+      textContent: text || html,
+    });
     console.log('📧 Email envoyé avec succès à', to);
     return true;
   } catch (error) {

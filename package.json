@@ -8,6 +8,7 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
+    "@getbrevo/brevo": "^6.0.2",
     "axios": "^1.18.1",
     "bcryptjs": "^2.4.3",
     "cheerio": "^1.2.0",
