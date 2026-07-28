@@ -18,6 +18,7 @@ const {
 
 // Routes publiques
 router.get('/public', getPublicNews);
+router.get('/public/:id', validateObjectId, getNewsById);
 
 // Routes protégées
 router.get('/', auth, getNews);
