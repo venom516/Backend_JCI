@@ -18,9 +18,9 @@ router.get('/', auth, role.notMembre, getEntretiens);
 router.get('/:id', auth, role.notMembre, validateObjectId, getEntretienById);
 router.post('/', auth, role.notMembre, validateEntretien, demanderEntretien);
 router.put('/:id', auth, role.notMembre, validateObjectId, updateEntretien);
-router.delete('/:id', auth, role.isPresident, validateObjectId, deleteEntretien);
-router.put('/:id/approve', auth, role.isPresident, validateObjectId, approveEntretien);
-router.put('/:id/reject', auth, role.isPresident, validateObjectId, rejectEntretien);
-router.put('/:id/realise', auth, role.isPresident, validateObjectId, realiseEntretien);
+router.delete('/:id', auth, role.hasRole(['President', 'VPFD']), validateObjectId, deleteEntretien);
+router.put('/:id/approve', auth, role.hasRole(['President', 'VPFD']), validateObjectId, approveEntretien);
+router.put('/:id/reject', auth, role.hasRole(['President', 'VPFD']), validateObjectId, rejectEntretien);
+router.put('/:id/realise', auth, role.hasRole(['President', 'VPFD']), validateObjectId, realiseEntretien);
 
 module.exports = router;

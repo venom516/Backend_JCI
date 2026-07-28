@@ -74,22 +74,22 @@ router.put('/:id', auth, validateObjectId, sanitizeInput, validateMembreUpdate, 
 // PUT - Valider un membre (Admin / Président)
 router.put('/:id/validate', auth, role.hasRole(['Admin', 'President']), validateObjectId, validateMembre);
 
-// PUT - Accepter un membre (Président) avec date d'entretien
-router.put('/:id/accept', auth, role.isPresident, validateObjectId, acceptMember);
+// PUT - Accepter un membre (Président ou VPFD) avec date d'entretien
+router.put('/:id/accept', auth, role.hasRole(['President', 'VPFD']), validateObjectId, acceptMember);
 
-// PUT - Valider une inscription directement (Président) - sans entretien
-router.put('/:id/valider', auth, role.isPresident, validateObjectId, validerInscriptionDirect);
+// PUT - Valider une inscription directement (Président ou VPFD) - sans entretien
+router.put('/:id/valider', auth, role.hasRole(['President', 'VPFD']), validateObjectId, validerInscriptionDirect);
 
-// PUT - Rejeter un membre (Président)
-router.put('/:id/reject', auth, role.isPresident, validateObjectId, rejectMember);
+// PUT - Rejeter un membre (Président ou VPFD)
+router.put('/:id/reject', auth, role.hasRole(['President', 'VPFD']), validateObjectId, rejectMember);
 
 // PUT - Suspendre un membre
-router.put('/:id/suspendre', auth, role.isUserManager, validateObjectId, suspendreMembre);
+router.put('/:id/suspendre', auth, role.hasRole(['President', 'SecretaireGeneral', 'VPFD']), validateObjectId, suspendreMembre);
 
 // PUT - Réactiver un membre
-router.put('/:id/reactiver', auth, role.isUserManager, validateObjectId, reactiverMembre);
+router.put('/:id/reactiver', auth, role.hasRole(['President', 'SecretaireGeneral', 'VPFD']), validateObjectId, reactiverMembre);
 
 // DELETE - Supprimer un membre
-router.delete('/:id', auth, role.isUserManager, validateObjectId, deleteMembre);
+router.delete('/:id', auth, role.hasRole(['President', 'SecretaireGeneral', 'VPFD']), validateObjectId, deleteMembre);
 
 module.exports = router;

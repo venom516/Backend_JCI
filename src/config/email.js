@@ -128,17 +128,18 @@ let resendReady = false;
 
 console.log('');
 console.log('=== RESEND CONFIGURATION ===');
-console.log('User configuré: ' + (process.env.EMAIL_USER ? 'oui' : 'non'));
+console.log('RESEND_KEY : ' + (process.env.RESEND_KEY ? 'configurée' : 'absente'));
+console.log('EMAIL_USER : ' + (process.env.EMAIL_USER ? 'configuré' : 'absent'));
 console.log('');
 
 const initResend = () => {
   if (!process.env.RESEND_KEY || !process.env.EMAIL_USER) {
-    console.log('⚠️ RESEND_KEY ou EMAIL_USER non défini — emails désactivés');
+    console.log('❌ Emails désactivés — RESEND_KEY ou EMAIL_USER manquant');
     return;
   }
 
   resendReady = true;
-  console.log('✅ Resend API prêt');
+  console.log('✅ Resend prêt');
 };
 
 initResend();
@@ -162,11 +163,11 @@ const sendEmail = async (to, subject, html, text) => {
       html: html || text,
       text: text || html,
     });
-    console.log('📧 Email envoyé avec succès à', to);
+    console.log('✅ Email envoyé à', to);
     return true;
 
   } catch (error) {
-    console.log("❌ Erreur envoi email :", error.message);
+    console.log('❌ Erreur d\'envoi à', to, ':', error.message);
     return false;
   }
 };

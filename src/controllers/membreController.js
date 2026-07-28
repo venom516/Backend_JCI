@@ -94,7 +94,8 @@ exports.getMembreById = async (req, res) => {
       });
     }
 
-    if (req.userRole !== 'President' && req.userRole !== 'SecretaireGeneral' && req.userId.toString() !== req.params.id) {
+    const allowed = ['President', 'SecretaireGeneral', 'VPFD'];
+    if (!allowed.includes(req.userRole) && req.userId.toString() !== req.params.id) {
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé'
@@ -416,7 +417,7 @@ exports.validateMembre = async (req, res) => {
 // ============================================================
 exports.suspendreMembre = async (req, res) => {
   try {
-    if (req.userRole !== 'President') {
+    if (!['President', 'SecretaireGeneral', 'VPFD'].includes(req.userRole)) {
       return res.status(403).json({
         success: false,
         message: 'Seul l\'administrateur ou le président peut suspendre des membres'
@@ -467,7 +468,7 @@ exports.suspendreMembre = async (req, res) => {
 // ============================================================
 exports.reactiverMembre = async (req, res) => {
   try {
-    if (req.userRole !== 'President') {
+    if (!['President', 'SecretaireGeneral', 'VPFD'].includes(req.userRole)) {
       return res.status(403).json({
         success: false,
         message: 'Seul l\'administrateur ou le président peut réactiver des membres'
@@ -518,7 +519,7 @@ exports.reactiverMembre = async (req, res) => {
 // ============================================================
 exports.deleteMembre = async (req, res) => {
   try {
-    if (req.userRole !== 'President' && req.userRole !== 'SecretaireGeneral') {
+    if (!['President', 'SecretaireGeneral', 'VPFD'].includes(req.userRole)) {
       return res.status(403).json({
         success: false,
         message: 'Seul l\'administrateur peut supprimer des membres'

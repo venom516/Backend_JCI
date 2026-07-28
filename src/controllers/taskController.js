@@ -162,7 +162,10 @@ exports.updateTask = async (req, res) => {
       });
     }
 
-    if (task.createdBy.toString() !== req.userId && req.userRole !== 'President') {
+    const canEdit = req.userRole === 'President'
+      || req.userRole === 'VPFD'
+      || task.createdBy.toString() === req.userId;
+    if (!canEdit) {
       return res.status(403).json({
         success: false,
         message: 'Vous n\'êtes pas autorisé à modifier cette tâche'
@@ -217,7 +220,7 @@ exports.deleteTask = async (req, res) => {
       });
     }
 
-    if (task.createdBy.toString() !== req.userId && req.userRole !== 'President') {
+    if (task.createdBy.toString() !== req.userId && req.userRole !== 'President' && req.userRole !== 'VPFD') {
       return res.status(403).json({
         success: false,
         message: 'Vous n\'êtes pas autorisé à supprimer cette tâche'

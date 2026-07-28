@@ -30,10 +30,10 @@ router.get('/:id', auth, validateObjectId, getTaskById);
 
 // Routes protégées
 router.post('/', auth, validateTask, createTask);
-router.post('/media', auth, role.isConseillerMedia, validateTask, createTaskMedia);
+router.post('/media', auth, role.hasRole(['President', 'ConseillerMedia', 'VPFD']), validateTask, createTaskMedia);
 router.put('/:id', auth, validateObjectId, updateTask);
-router.delete('/:id', auth, role.isPresident, validateObjectId, deleteTask);
+router.delete('/:id', auth, role.hasRole(['President', 'VPFD']), validateObjectId, deleteTask);
 router.post('/:id/comments', auth, validateObjectId, addComment);
-router.post('/:id/notify', auth, role.isConseillerMedia, notifyMediaTasks);
+router.post('/:id/notify', auth, role.hasRole(['President', 'ConseillerMedia', 'VPFD']), notifyMediaTasks);
 
 module.exports = router;
