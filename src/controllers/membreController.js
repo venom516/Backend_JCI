@@ -218,8 +218,36 @@ exports.updateMembre = async (req, res) => {
       req.body.photo = result.secure_url;
     }
 
-    // Extraire le password pour le traiter via le hook pre('save')
-    const { password, ...updateData } = req.body;
+    // Liste blanche d'écriture (§4.5) : un membre ne peut pas s'auto-attribuer
+    // isEmailVerified / archiver / status / role / tokens de reset.
+    const SELF_UPDATABLE_FIELDS = [
+      'nom', 'prenom', 'email', 'telephone', 'adresse', 'situationProfessionnelle',
+      'dateNaissance', 'urlFacebook', 'urlLinkedIn', 'photo', 'langues', 'competences',
+      'pointsForts', 'societe', 'hobbies', 'association', 'connaissanceZone',
+      'connaissanceJCI', 'pointsDeveloppement', 'parrainId', 'parrain'
+    ];
+    const PRIVILEGED_FIELDS = [
+      'role', 'status', 'archiver', 'isEmailVerified', 'codeValidation',
+      'codeValidationExpire', 'resetPasswordToken', 'resetPasswordExpires',
+      'mandatAnnee', 'datePriseFonction', 'lastLogin'
+    ];
+
+    const { password, ...rest } = req.body;
+    const updateData = {};
+    for (const field of SELF_UPDATABLE_FIELDS) {
+      if (rest[field] !== undefined) updateData[field] = rest[field];
+    }
+    if (req.userRole === 'President') {
+      for (const field of PRIVILEGED_FIELDS) {
+        if (rest[field] !== undefined) updateData[field] = rest[field];
+      }
+    }
+
+    // Un changement d'email invalide toujours la vérification, y compris en auto-édition
+    if (emailChanged) {
+      updateData.isEmailVerified = false;
+      updateData.status = 'suspendu';
+    }
 
     let updated;
     if (password) {

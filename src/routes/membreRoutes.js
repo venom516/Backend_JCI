@@ -69,7 +69,7 @@ router.get('/statuts/:status', auth, (req, res, next) => { req.query.status = re
 router.get('/:id', auth, validateObjectId, getMembreById);
 
 // PUT - MODIFIER LE PROFIL (updateMembre)
-router.put('/:id', auth, validateObjectId, sanitizeInput, validateMembreUpdate, updateMembre);
+router.put('/:id', auth, validateObjectId, role.isSelfOrStaff, sanitizeInput, validateMembreUpdate, updateMembre);
 
 // PUT - Valider un membre (Admin / Président)
 router.put('/:id/validate', auth, role.hasRole(['Admin', 'President']), validateObjectId, validateMembre);

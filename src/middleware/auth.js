@@ -34,8 +34,7 @@ const auth = async (req, res, next) => {
     }
 
     // Récupérer l'utilisateur
-    const membre = await Membre.findById(decoded.id)
-      .select('-password -codeValidation -codeValidationExpire');
+    const membre = await Membre.findById(decoded.id);
 
     if (!membre) {
       return res.status(401).json({
@@ -56,6 +55,13 @@ const auth = async (req, res, next) => {
       return res.status(403).json({
         success: false,
         message: 'Votre compte est suspendu'
+      });
+    }
+
+    if (membre.archiver) {
+      return res.status(403).json({
+        success: false,
+        message: 'Votre compte a été archivé'
       });
     }
 

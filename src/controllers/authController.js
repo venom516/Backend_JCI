@@ -631,7 +631,7 @@ exports.resetPassword = async (req, res) => {
       email: email.toLowerCase(),
       resetPasswordToken: code,
       resetPasswordExpires: { $gt: new Date() }
-    });
+    }).select('+password');
 
     if (!membre) {
       return res.status(400).json({
@@ -714,7 +714,7 @@ exports.loginWithToken = async (req, res) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const membre = await Membre.findById(decoded.id).select('-password -validationCode -resetCode');
+    const membre = await Membre.findById(decoded.id).select('-codeValidation -codeValidationExpire -resetPasswordToken -resetPasswordExpires');
 
     if (!membre) {
       return res.status(404).json({ success: false, message: 'Membre introuvable' });
@@ -753,7 +753,7 @@ exports.memberTokenLogin = async (req, res) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const membre = await Membre.findById(decoded.id).select('-password -validationCode -resetCode');
+    const membre = await Membre.findById(decoded.id).select('-codeValidation -codeValidationExpire -resetPasswordToken -resetPasswordExpires');
 
     if (!membre) {
       return res.status(404).json({ success: false, message: 'Membre introuvable' });

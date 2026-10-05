@@ -7,19 +7,21 @@ const membreSchema = new mongoose.Schema({
   nom: { type: String, required: true, trim: true },
   prenom: { type: String, required: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-  password: { type: String, required: true },
+  password: { type: String, required: true, select: false },
   role: { 
     type: String, 
     default: 'Membre' 
   },
+  roleSecondaire: { type: String },
   status: { 
     type: String, 
-    enum: ['actif', 'inactif', 'suspendu', 'en-attente', 'non-validé', 'refusé'], 
+    enum: ['non-inscrit', 'en-attente', 'actif', 'suspendu', 'banni', 'refusé', 'inactif', 'non-validé'], 
     default: 'en-attente' 
   },
+  archiver: { type: Boolean, default: false },
   isEmailVerified: { type: Boolean, default: false },
-  codeValidation: { type: String },
-  codeValidationExpire: { type: Date },
+  codeValidation: { type: String, select: false },
+  codeValidationExpire: { type: Date, select: false },
   telephone: { type: String, trim: true },
   adresse: { type: String, trim: true },
   situationProfessionnelle: { type: String, trim: true },
@@ -40,8 +42,8 @@ const membreSchema = new mongoose.Schema({
   parrain: { type: String, trim: true },
   datePriseFonction: { type: Date },
   mandatAnnee: { type: Number },
-  resetPasswordToken: { type: String },
-  resetPasswordExpires: { type: Date },
+  resetPasswordToken: { type: String, select: false },
+  resetPasswordExpires: { type: Date, select: false },
   lastLogin: { type: Date },
 }, { timestamps: true });
 
