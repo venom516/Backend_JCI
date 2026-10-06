@@ -125,7 +125,7 @@ exports.rejectEntretien = async (req, res) => {
       await sendEntretienRejectedEmail(membre.email, membre, entretien);
     }
 
-    res.json({ success: true, message: 'Entretien rejeté et membre archivé', data: entretien });
+    res.json({ success: true, message: 'Candidature refusée (entretien annulé)', data: entretien });
   } catch (error) {
     console.error('❌ Erreur rejectEntretien:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });

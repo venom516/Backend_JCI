@@ -1102,7 +1102,7 @@ exports.acceptMember = async (req, res) => {
 };
 
 // ============================================================
-// REJETER UN MEMBRE (Président) - archive avec statut refusé
+// REJETER UN MEMBRE (Président) - statut refusé
 // ============================================================
 exports.rejectMember = async (req, res) => {
   try {
@@ -1128,7 +1128,7 @@ exports.rejectMember = async (req, res) => {
 
     return res.json({
       success: true,
-      message: '❌ Inscription refusée. Membre archivé.',
+      message: 'Inscription refusée',
       data: membre
     });
   } catch (error) {
