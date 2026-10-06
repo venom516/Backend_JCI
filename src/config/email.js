@@ -2,6 +2,7 @@ const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const Membre = require('../models/Membre');
 const SiteConfig = require('../models/SiteConfig');
+const { escapeHtml } = require('../utils/html');
 
 const MEMBER_TOKEN_EXPIRY = process.env.MEMBER_TOKEN_EXPIRY || '30d';
 
@@ -101,11 +102,15 @@ const emailLayout = (title, content) => `
   </div>
 `;
 
+// L'échappement HTML se fait a la CONSTRUCTION du gabarit (escapeHtml, issue
+// de utils/html.js) : sanitizeInput ne transforme plus les entrees en entites,
+// c'est donc ce point qui neutralise ce qui provient d'un utilisateur.
+
 const iconTag = (svg, label) => `
   <div style="display: flex; align-items: flex-start; gap: 10px; margin: 6px 0;">
     <div style="flex-shrink: 0; width: 24px; height: 24px; margin-top: 1px;">${svg}</div>
     <div style="flex: 1;">
-      <strong style="color: #64748b; font-size: 13px; font-weight: 600;">${label}</strong>
+      <strong style="color: #64748b; font-size: 13px; font-weight: 600;">${escapeHtml(label)}</strong>
     </div>
   </div>
 `;
@@ -114,8 +119,8 @@ const iconValue = (svg, label, value) => `
   <div style="display: flex; align-items: flex-start; gap: 10px; margin: 6px 0;">
     <div style="flex-shrink: 0; width: 24px; height: 24px; margin-top: 1px;">${svg}</div>
     <div style="flex: 1;">
-      <strong style="color: #64748b; font-size: 13px; font-weight: 600;">${label}:</strong>
-      <span style="color: #1e293b; font-size: 14px; margin-left: 4px;">${value}</span>
+      <strong style="color: #64748b; font-size: 13px; font-weight: 600;">${escapeHtml(label)}:</strong>
+      <span style="color: #1e293b; font-size: 14px; margin-left: 4px;">${escapeHtml(value)}</span>
     </div>
   </div>
 `;
@@ -173,6 +178,33 @@ const sendEmail = async (to, subject, html, text) => {
 };
 
 // ============================================================
+// 6.2 — TEMPLATES SUSPENDUS
+// ============================================================
+// Ces 7 envois sont suspendus (no-op). Ils ne doivent pas etre reactives sans
+// demande explicite : retirer un nom d'ici est une decision, jamais un defaut.
+// Le garde est en tete de chaque fonction : le gabarit reste intact et la
+// reactivation ne demande que de vider cette liste.
+const TEMPLATES_SUSPENDUS = new Set([
+  'sendNewDocumentEmail',
+  'sendTaskAssignmentEmail',
+  'sendNewEventEmail',
+  'sendNewPublicationEmail',
+  'sendNewNewsEmail',
+  'sendTaskReminderEmail',
+  'sendAutoTaskReminderEmail',
+]);
+
+// Retourne true si l'envoi doit etre saute. null est la valeur "non envoye"
+// attendue par les appelants (reminderService, taskController).
+const suspendu = (nom) => {
+  if (TEMPLATES_SUSPENDUS.has(nom)) {
+    console.log('⏸️ Email suspendu (6.2):', nom);
+    return true;
+  }
+  return false;
+};
+
+// ============================================================
 // 1. INSCRIPTION - CONFIRMATION AU MEMBRE
 // ============================================================
 
@@ -180,7 +212,7 @@ const sendRegistrationEmail = async (email, nom, prenom, token) => {
   const subject = 'Inscription - JCI Sidi Mansour';
   const verifyLink = `${FRONTEND_URL}/verify-email?token=${token}`;
   const html = emailLayout('Inscription reçue', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${prenom} ${nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(prenom)} ${escapeHtml(nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Votre inscription a été reçue avec succès. Veuillez vérifier votre adresse email en cliquant sur le bouton ci-dessous :</p>
     <div style="text-align: center; margin: 24px 0;">
       <a href="${verifyLink}" style="${STYLES.btn} ${STYLES.btnPrimary}">Vérifier mon email</a>
@@ -228,7 +260,7 @@ const sendNewMemberNotificationToPresident = async (presidentEmail, membre) => {
 const sendValidationAcceptedEmail = async (membre, entretien) => {
   const subject = 'Compte validé - JCI Sidi Mansour';
   const html = emailLayout('Compte validé', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Félicitations ! Votre compte JCI Sidi Mansour a été validé par le Président. Vous pouvez maintenant accéder à votre espace personnel.</p>
     <div style="text-align: center; margin: 20px 0;">
       <a href="${getMemberLink(membre, 'dashboard')}" style="${STYLES.btn} ${STYLES.btnPrimary}">Accéder à mon espace</a>
@@ -260,7 +292,7 @@ const sendInterviewEmail = async (membre, entretien) => {
   const lieu = entretien.lieu || await getLieuEntretien();
   const subject = 'Entretien de bienvenue - JCI Sidi Mansour';
   const html = emailLayout('Entretien de bienvenue', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Votre inscription a été acceptée par le Président. Un entretien de bienvenue a été planifié pour vous accueillir.</p>
     <div style="${STYLES.cardGreen}">
       ${iconValue(SVG.calendar, 'Date', new Date(entretien.date).toLocaleString('fr-FR'))}
@@ -296,7 +328,7 @@ const sendValidationConfirmationToPresident = async (presidentEmail, membre, ent
 const sendRejectionEmail = async (email, nom, prenom) => {
   const subject = 'Refus de votre inscription';
   const html = emailLayout('Demande rejetée', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${prenom} ${nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(prenom)} ${escapeHtml(nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Votre demande d'inscription à JCI Sidi Mansour n'a pas été retenue.</p>
     <p style="${STYLES.paragraph}">Si vous avez des questions, vous pouvez contacter l'association.</p>
   `);
@@ -310,7 +342,7 @@ const sendRejectionEmail = async (email, nom, prenom) => {
 const sendValidationAccepteeEmail = async (membre) => {
   const subject = 'Validation de votre inscription';
   const html = emailLayout('Inscription validée', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Votre inscription à JCI Sidi Mansour a été acceptée par le Président.</p>
     <p style="${STYLES.paragraph}">Vous pouvez dès maintenant accéder à votre espace personnel et participer aux activités de l'association.</p>
     <div style="text-align: center; margin: 20px 0;">
@@ -327,7 +359,7 @@ const sendValidationAccepteeEmail = async (membre) => {
 const sendSuspensionEmail = async (email, nom, prenom) => {
   const subject = 'Compte suspendu - JCI Sidi Mansour';
   const html = emailLayout('Compte suspendu', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${prenom} ${nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(prenom)} ${escapeHtml(nom)}</strong>,</p>
     <div style="${STYLES.cardYellow}">
       ${iconTag(SVG.pause, 'Votre compte a été suspendu par le Président. Pour toute question, veuillez contacter l\'association.')}
     </div>
@@ -343,7 +375,7 @@ const sendEmailChangeVerification = async (email, nom, prenom, token) => {
   const subject = 'Vérification de votre nouvel email - JCI Sidi Mansour';
   const verifyLink = `${FRONTEND_URL}/verify-email?token=${token}`;
   const html = emailLayout('Vérification email', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${prenom} ${nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(prenom)} ${escapeHtml(nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Votre adresse email a été modifiée. Pour confirmer votre nouvelle adresse et réactiver votre compte, veuillez cliquer sur le bouton ci-dessous :</p>
     <div style="text-align: center; margin: 24px 0;">
       <a href="${verifyLink}" style="${STYLES.btn} ${STYLES.btnPrimary}">Confirmer mon email</a>
@@ -363,7 +395,7 @@ const sendEmailChangeVerification = async (email, nom, prenom, token) => {
 const sendReactivationEmail = async (email, nom, prenom, membreId) => {
   const subject = 'Compte réactivé - JCI Sidi Mansour';
   const html = emailLayout('Compte réactivé', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${prenom} ${nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(prenom)} ${escapeHtml(nom)}</strong>,</p>
     <div style="${STYLES.cardGreen}">
       ${iconTag(SVG.refresh, 'Votre compte a été réactivé par le Président. Vous pouvez maintenant accéder à votre espace personnel.')}
     </div>
@@ -379,6 +411,7 @@ const sendReactivationEmail = async (email, nom, prenom, membreId) => {
 // ============================================================
 
 const sendNewDocumentEmail = async (emails, document, user) => {
+  if (suspendu('sendNewDocumentEmail')) return null;
   const subject = `Nouveau document: ${document.titre}`;
   for (const email of emails) {
     let membreLink = `${FRONTEND_URL}/documents`;
@@ -411,9 +444,10 @@ const sendNewDocumentEmail = async (emails, document, user) => {
 // ============================================================
 
 const sendTaskAssignmentEmail = async (email, membre, task) => {
+  if (suspendu('sendTaskAssignmentEmail')) return null;
   const subject = `Nouvelle tâche: ${task.titre}`;
   const html = emailLayout('Nouvelle tâche assignée', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Une nouvelle tâche vous a été assignée.</p>
     <div style="${STYLES.card}">
       ${iconValue(SVG.clipboard, 'Titre', task.titre)}
@@ -434,9 +468,10 @@ const sendTaskAssignmentEmail = async (email, membre, task) => {
 // ============================================================
 
 const sendNewEventEmail = async (email, membre, event) => {
+  if (suspendu('sendNewEventEmail')) return null;
   const subject = `Nouvel événement: ${event.titre}`;
   const html = emailLayout('Nouvel événement', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Un nouvel événement a été créé sur la plateforme.</p>
     <div style="${STYLES.card}">
       ${iconValue(SVG.calendar, 'Titre', event.titre)}
@@ -481,7 +516,7 @@ const sendEntretienRequestEmail = async (presidentEmail, membre, entretien) => {
 const sendEntretienApprovedEmail = async (email, membre, entretien) => {
   const subject = 'Demande d\'entretien approuvée - JCI Sidi Mansour';
   const html = emailLayout('Entretien approuvé', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Votre demande d'entretien a été approuvée par le Président.</p>
     <div style="${STYLES.cardGreen}">
       ${iconValue(SVG.calendar, 'Date', new Date(entretien.date).toLocaleString('fr-FR'))}
@@ -502,7 +537,7 @@ const sendEntretienApprovedEmail = async (email, membre, entretien) => {
 const sendEntretienRejectedEmail = async (email, membre, entretien) => {
   const subject = 'Demande d\'entretien - JCI Sidi Mansour';
   const html = emailLayout('Entretien refusé', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Votre demande d'entretien n'a pas été retenue.</p>
     <p style="${STYLES.paragraph}">Si vous avez des questions, veuillez contacter l'association.</p>
   `);
@@ -514,6 +549,7 @@ const sendEntretienRejectedEmail = async (email, membre, entretien) => {
 // ============================================================
 
 const sendNewPublicationEmail = async (emails, publication, user) => {
+  if (suspendu('sendNewPublicationEmail')) return null;
   const subject = `Nouvelle publication: ${publication.titre}`;
   for (const email of emails) {
     let membreLink = `${FRONTEND_URL}/publications`;
@@ -545,6 +581,7 @@ const sendNewPublicationEmail = async (emails, publication, user) => {
 // ============================================================
 
 const sendNewNewsEmail = async (emails, news, user) => {
+  if (suspendu('sendNewNewsEmail')) return null;
   const subject = `Nouvelle actualité: ${news.titre}`;
   for (const email of emails) {
     let membreLink = `${FRONTEND_URL}/news`;
@@ -574,9 +611,10 @@ const sendNewNewsEmail = async (emails, news, user) => {
 // ============================================================
 
 const sendTaskReminderEmail = async (email, membre, task) => {
+  if (suspendu('sendTaskReminderEmail')) return null;
   const subject = `Rappel - Tâche Média: ${task.titre}`;
   const html = emailLayout('Rappel de tâche Média', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Un rappel concernant votre tâche média ci-dessous.</p>
     <div style="${STYLES.card}">
       ${iconValue(SVG.clipboard, 'Titre', task.titre)}
@@ -602,9 +640,10 @@ const sendTaskReminderEmail = async (email, membre, task) => {
 // ============================================================
 
 const sendAutoTaskReminderEmail = async (email, membre, task) => {
+  if (suspendu('sendAutoTaskReminderEmail')) return null;
   const subject = `Rappel automatique: ${task.titre} (dans 24h)`;
   const html = emailLayout('Rappel automatique', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Votre tâche média arrive à échéance.</p>
     <div style="${STYLES.card}">
       ${iconValue(SVG.clipboard, 'Titre', task.titre)}
@@ -630,7 +669,7 @@ const sendAutoTaskReminderEmail = async (email, membre, task) => {
 const sendForgotPasswordCode = async (email, prenom, nom, code) => {
   const subject = 'Réinitialisation de mot de passe - JCI Sidi Mansour';
   const html = emailLayout('Réinitialisation', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${prenom} ${nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(prenom)} ${escapeHtml(nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Vous avez demandé la réinitialisation de votre mot de passe. Utilisez le code ci-dessous :</p>
     <div style="text-align: center; margin: 24px 0;">
       <div style="font-size: 28px; font-weight: 700; letter-spacing: 8px; color: #3A67B1; background: #eef2ff; padding: 16px 24px; border-radius: 8px; display: inline-block; font-family: 'Courier New', monospace;">
@@ -658,7 +697,7 @@ const sendContactNotificationToPresident = async (presidentEmail, contact) => {
     </div>
     <div style="background: #ffffff; border-radius: 8px; padding: 16px; margin: 16px 0; border: 1px solid #e2e8f0;">
       <h3 style="color: #3A67B1; margin: 0 0 10px 0; font-size: 14px; font-weight: 600;">${SVG.clipboard} Message :</h3>
-      <p style="color: #475569; font-size: 14px; line-height: 1.6; white-space: pre-wrap; margin: 0;">${contact.message}</p>
+      <p style="color: #475569; font-size: 14px; line-height: 1.6; white-space: pre-wrap; margin: 0;">${escapeHtml(contact.message)}</p>
     </div>
     <div style="text-align: center; margin: 20px 0;">
       <a href="${FRONTEND_URL}/president/contacts" style="${STYLES.btn} ${STYLES.btnPrimary}">Voir les messages</a>

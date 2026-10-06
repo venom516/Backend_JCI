@@ -34,12 +34,25 @@ const auth = async (req, res, next) => {
     }
 
     // Récupérer l'utilisateur
-    const membre = await Membre.findById(decoded.id);
+    const membre = await Membre.findById(decoded.id).select('+passwordChangedAt');
 
     if (!membre) {
       return res.status(401).json({
         success: false,
         message: 'Utilisateur non trouvé'
+      });
+    }
+
+    // Invalidation apres changement de mot de passe : iat est en secondes, la
+    // comparaison est stricte pour qu'un token emis dans la meme seconde passe.
+    if (
+      membre.passwordChangedAt &&
+      typeof decoded.iat === 'number' &&
+      decoded.iat < Math.floor(membre.passwordChangedAt.getTime() / 1000)
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: 'Session expirée. Veuillez vous reconnecter.'
       });
     }
 
@@ -97,8 +110,18 @@ const optionalAuth = async (req, res, next) => {
       return next();
     }
 
-    const membre = await Membre.findById(decoded.id);
+    const membre = await Membre.findById(decoded.id).select('+passwordChangedAt');
     if (!membre) return next();
+
+    // Token emis avant le dernier changement de mot de passe : comme pour un
+    // compte inutilisable, on reste anonyme plutot que de renvoyer 401.
+    if (
+      membre.passwordChangedAt &&
+      typeof decoded.iat === 'number' &&
+      decoded.iat < Math.floor(membre.passwordChangedAt.getTime() / 1000)
+    ) {
+      return next();
+    }
 
     // Compte inutilisable : reste anonyme, aucune erreur renvoyee
     if (membre.status === 'banni' || membre.status === 'suspendu' || membre.archiver) {

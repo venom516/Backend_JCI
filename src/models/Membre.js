@@ -10,9 +10,15 @@ const membreSchema = new mongoose.Schema({
   password: { type: String, required: true, select: false },
   role: { 
     type: String, 
-    default: 'Membre' 
+    default: 'Membre',
+    // Tous les autres champs String portent trim:true : sans lui, "President "
+    // echoue silencieusement sur role === 'President' (droits, unicite, stats).
+    trim: true
   },
-  roleSecondaire: { type: String },
+  roleSecondaire: { type: String, trim: true },
+  // Pose au changement de mot de passe : un JWT emis avant cet instant est
+  // refuse par auth (invalidation de toutes les sessions existantes).
+  passwordChangedAt: { type: Date, select: false },
   status: { 
     type: String, 
     enum: ['non-inscrit', 'en-attente', 'actif', 'suspendu', 'banni', 'refusé', 'inactif', 'non-validé'], 

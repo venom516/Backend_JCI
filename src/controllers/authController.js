@@ -10,6 +10,7 @@ const {
   sendForgotPasswordCode,
   sendInterviewEmail
 } = require('../config/email');
+const { telephoneRenseigne, regexTelephone } = require('../utils/telephone');
 
 // ============================================================
 // GENERATE TOKEN
@@ -24,6 +25,13 @@ const generateToken = (id) => {
 // regles avec des messages differents : toute divergence ici doit etre
 // reportee la-bas aussi.
 const STATUTS_ACCES_REFUSES = ['banni', 'suspendu', 'refusé'];
+
+// Tolérance de 60 s sur l'expiration des codes de vérification et de
+// réinitialisation : absorbe le décalage entre l'horloge du serveur et celle
+// qui a généré le code. Comparée ainsi, une expiration survenue il y a moins
+// d'une minute est encore acceptée.
+const TOLERANCE_CODE_MS = 60 * 1000;
+const expirationCode = () => new Date(Date.now() - TOLERANCE_CODE_MS);
 
 // ============================================================
 // GENERATE VALIDATION CODE
@@ -122,6 +130,18 @@ exports.register = async (req, res) => {
       });
     }
 
+    // ✅ Unicité du téléphone : comparaison en chiffres seuls, sinon
+    // "98 123 456" et "98123456" passent toutes les deux.
+    if (telephoneRenseigne(telephone)) {
+      const telephoneOccupe = await Membre.findOne({ telephone: regexTelephone(telephone) }).select('_id');
+      if (telephoneOccupe) {
+        return res.status(400).json({
+          success: false,
+          message: 'Ce numéro de téléphone est déjà utilisé'
+        });
+      }
+    }
+
     // ✅ Générer token de vérification (JWT)
     const verificationToken = jwt.sign(
       { email: email.toLowerCase() },
@@ -212,7 +232,7 @@ exports.verifyEmail = async (req, res) => {
       {
         email: email.toLowerCase(),
         codeValidation: code,
-        codeValidationExpire: { $gt: new Date() },
+        codeValidationExpire: { $gt: expirationCode() },
         isEmailVerified: false
       },
       {
@@ -600,7 +620,7 @@ exports.verifyResetCode = async (req, res) => {
     const membre = await Membre.findOne({
       email: email.toLowerCase(),
       resetPasswordToken: { $exists: true },
-      resetPasswordExpires: { $gt: new Date() }
+      resetPasswordExpires: { $gt: expirationCode() }
     });
 
     if (!membre) {
@@ -661,7 +681,7 @@ exports.resetPassword = async (req, res) => {
     const membre = await Membre.findOne({
       email: email.toLowerCase(),
       resetPasswordToken: { $exists: true },
-      resetPasswordExpires: { $gt: new Date() }
+      resetPasswordExpires: { $gt: expirationCode() }
     }).select('+password +resetPasswordToken');
 
     if (!membre) {
@@ -687,6 +707,10 @@ exports.resetPassword = async (req, res) => {
     }
 
     membre.password = newPassword;
+    // Invalidation de toutes les sessions : un JWT emis avant cet instant est
+    // rejete par auth. Sans cela, un ancien token reste valide 7 jours apres
+    // une reinitialisation de mot de passe.
+    membre.passwordChangedAt = new Date();
     membre.resetPasswordToken = undefined;
     membre.resetPasswordExpires = undefined;
     await membre.save();

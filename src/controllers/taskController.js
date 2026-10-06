@@ -534,15 +534,23 @@ exports.notifyMediaTasks = async (req, res) => {
     }
 
     const { sendTaskReminderEmail } = require('../config/email');
-    await sendTaskReminderEmail(task.membre.email, task.membre, task);
-    
-    task.notificationSent = true;
-    task.notificationDate = new Date();
-    await task.save();
+    const envoye = await sendTaskReminderEmail(task.membre.email, task.membre, task);
 
-    res.json({
-      success: true,
-      message: `✅ Notification envoyée avec succès à ${task.membre.email}`
+    // 6.4 : ne marquer que sur un envoi reussi et ne pas annoncer un succes
+    // que le serveur n'a pas produit. Un template suspendu renvoie null.
+    if (envoye === true) {
+      task.notificationSent = true;
+      task.notificationDate = new Date();
+      await task.save();
+      return res.json({
+        success: true,
+        message: `✅ Notification envoyée avec succès à ${task.membre.email}`
+      });
+    }
+
+    res.status(502).json({
+      success: false,
+      message: 'Notification non envoyée (template suspendu ou service email indisponible)'
     });
   } catch (error) {
     console.error('❌ Erreur notifyMediaTasks:', error);

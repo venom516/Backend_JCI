@@ -1,7 +1,8 @@
 const Document = require('../models/Document');
 const Membre = require('../models/Membre');
-const { sendNewDocumentEmail } = require('../config/email');
+const { sendEmail, sendNewDocumentEmail } = require('../config/email');
 const { pourRecherche } = require('../utils/search');
+const { escapeHtml } = require('../utils/html');
 
 // ============================================================
 // 1. UPLOAD DOCUMENT (creerDocument + insertDocument)
@@ -260,7 +261,7 @@ exports.approveDocument = async (req, res) => {
       await sendEmail(
         creator.email,
         `✅ Document approuvé: ${document.titre}`,
-        `<p>Votre document "${document.titre}" a été approuvé.</p>`
+        `<p>Votre document "${escapeHtml(document.titre)}" a été approuvé.</p>`
       );
     }
 

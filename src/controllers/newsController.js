@@ -3,12 +3,17 @@ const Membre = require('../models/Membre');
 const { sendNewNewsEmail } = require('../config/email');
 const { pourRecherche } = require('../utils/search');
 
+// Catalogues valides, derives du schema : une seule source de verite, en
+// miroir des listes du frontend (NewsManagementPage, I18nContext).
+const CATEGORIES = new Set(News.schema.path('category').enumValues);
+const STATUSES = new Set(News.schema.path('status').enumValues);
+
 // ============================================================
 // 1. CRÉER UNE ACTUALITÉ
 // ============================================================
 exports.createNews = async (req, res) => {
   try {
-    const { titre, contenu, image, tags } = req.body;
+    const { titre, contenu, image, tags, category } = req.body;
 
     if (!titre || !contenu) {
       return res.status(400).json({
@@ -17,11 +22,16 @@ exports.createNews = async (req, res) => {
       });
     }
 
+    // Liste blanche : la categorie doit appartenir au catalogue du frontend,
+    // sinon Mongoose rejetterait la creation avec une Validation Error 500.
+    const categorie = CATEGORIES.has(category) ? category : 'General';
+
     const news = await News.create({
       titre,
       contenu,
       image: image || 'default-news.jpg',
       tags: tags || [],
+      category: categorie,
       createdBy: req.userId,
       status: 'brouillon'
     });
@@ -46,10 +56,11 @@ exports.createNews = async (req, res) => {
 // ============================================================
 exports.getNews = async (req, res) => {
   try {
-    const { status, search, page = 1, limit = 20 } = req.query;
+    const { status, search, page = 1, limit = 20, category } = req.query;
     const filter = {};
 
     if (status) filter.status = status;
+    if (category) filter.category = category;
     if (search) {
       filter.$or = [
         { titre: { $regex: pourRecherche(search), $options: 'i' } },
@@ -95,16 +106,18 @@ exports.getNews = async (req, res) => {
 // ============================================================
 exports.getPublicNews = async (req, res) => {
   try {
-    const { page = 1, limit = 10 } = req.query;
+    const { page = 1, limit = 10, category } = req.query;
+    const filter = { status: 'publiée' };
+    if (category) filter.category = category;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const [news, total] = await Promise.all([
-      News.find({ status: 'publiée' })
+      News.find(filter)
         .populate('createdBy', 'nom prenom')
         .sort({ date: -1 })
         .skip(skip)
         .limit(parseInt(limit)),
-      News.countDocuments({ status: 'publiée' })
+      News.countDocuments(filter)
     ]);
 
     res.json({
@@ -195,9 +208,19 @@ exports.updateNews = async (req, res) => {
       });
     }
 
+    // Liste blanche : req.body ne doit jamais pouvoir ecraser createdBy,
+    // views, likes ou comments depuis un appelant externe (mass assignment).
+    const CHAMPS_MAJ = ['titre', 'contenu', 'image', 'tags', 'category', 'status', 'date'];
+    const maj = {};
+    for (const champ of CHAMPS_MAJ) {
+      if (req.body[champ] !== undefined) maj[champ] = req.body[champ];
+    }
+    if (maj.category !== undefined && !CATEGORIES.has(maj.category)) delete maj.category;
+    if (maj.status !== undefined && !STATUSES.has(maj.status)) delete maj.status;
+
     const updated = await News.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      maj,
       { new: true, runValidators: true }
     );
 
