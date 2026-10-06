@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const role = require('../middleware/role');
-const upload = require('../middleware/upload');
+const { uploadMedia } = require('../middleware/upload');
 const { validatePublication, validateObjectId } = require('../middleware/validation');
 const {
   createPublication,
@@ -29,14 +29,14 @@ const handleMulterError = (err, req, res, next) => {
 };
 
 router.post('/', auth, role.isConseillerMedia, (req, res, next) => {
-  upload.single('fichier')(req, res, (err) => {
+  uploadMedia.single('fichier')(req, res, (err) => {
     if (err) return handleMulterError(err, req, res, next);
     next();
   });
 }, validatePublication, createPublication);
 
 router.put('/:id', auth, role.isConseillerMedia, (req, res, next) => {
-  upload.single('fichier')(req, res, (err) => {
+  uploadMedia.single('fichier')(req, res, (err) => {
     if (err) return handleMulterError(err, req, res, next);
     next();
   });
@@ -47,7 +47,7 @@ router.put('/:id/archive', auth, role.isConseillerMedia, validateObjectId, archi
 router.put('/:id/stats', auth, role.isConseillerMedia, validateObjectId, updatePublicationStats);
 
 router.post('/publish-direct', auth, role.isConseillerMedia, (req, res, next) => {
-  upload.array('fichiers', 10)(req, res, (err) => {
+  uploadMedia.array('fichiers', 10)(req, res, (err) => {
     if (err) return handleMulterError(err, req, res, next);
     next();
   });

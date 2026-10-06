@@ -16,13 +16,18 @@ const {
   addComment
 } = require('../controllers/newsController');
 
-// Routes publiques
+// Routes publiques : lecture anonyme restreinte au contenu publie (voir
+// getNewsById). optionalAuth permet de compter une vue seulement si le
+// visiteur est really connecte.
 router.get('/public', getPublicNews);
-router.get('/public/:id', validateObjectId, getNewsById);
+router.get('/public/:id', auth.optionalAuth, validateObjectId, getNewsById);
+
+// GET /:id est public : la restriction publie/brouillon est appliquee dans le
+// controleur, un membre connecte pouvant lire ses propres brouillons.
+router.get('/:id', auth.optionalAuth, validateObjectId, getNewsById);
 
 // Routes protégées
 router.get('/', auth, getNews);
-router.get('/:id', auth, validateObjectId, getNewsById);
 router.post('/', auth, role.isConseillerMedia, validateNews, createNews);
 router.put('/:id', auth, role.isConseillerMedia, validateObjectId, updateNews);
 router.delete('/:id', auth, role.isConseillerMedia, validateObjectId, deleteNews);

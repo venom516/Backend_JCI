@@ -1,6 +1,7 @@
 const Event = require('../models/Event');
 const Membre = require('../models/Membre');
 const { sendNewEventEmail } = require('../config/email');
+const { pourRecherche } = require('../utils/search');
 
 // ============================================================
 // 1. CRÉER UN ÉVÉNEMENT
@@ -72,8 +73,8 @@ exports.getEvents = async (req, res) => {
     if (status) filter.status = status;
     if (search) {
       filter.$or = [
-        { titre: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { titre: { $regex: pourRecherche(search), $options: 'i' } },
+        { description: { $regex: pourRecherche(search), $options: 'i' } }
       ];
     }
 

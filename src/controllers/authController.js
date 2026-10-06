@@ -20,11 +20,29 @@ const generateToken = (id) => {
   });
 };
 
+// Source unique des statuts qui interdisent l'acces. auth.js porte les memes
+// regles avec des messages differents : toute divergence ici doit etre
+// reportee la-bas aussi.
+const STATUTS_ACCES_REFUSES = ['banni', 'suspendu', 'refusé'];
+
 // ============================================================
 // GENERATE VALIDATION CODE
 // ============================================================
 const generateValidationCode = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
+};
+
+// Le code de reinitialisation est stocke hache : une fuite de la base ne
+// permet pas de reinitialiser le mot de passe d'un compte (§1.9.7).
+const hashResetCode = (code) =>
+  crypto.createHash('sha256').update(String(code)).digest('hex');
+
+const verifyResetCode = (code, storedHash) => {
+  if (!storedHash) return false;
+  const a = Buffer.from(hashResetCode(code), 'hex');
+  const b = Buffer.from(storedHash, 'hex');
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
 };
 
 // ============================================================
@@ -332,7 +350,6 @@ exports.login = async (req, res) => {
       });
     }
 
-    // ✅ Vérifier le statut
     if (membre.status === 'banni') {
       return res.status(403).json({
         success: false,
@@ -344,6 +361,13 @@ exports.login = async (req, res) => {
       return res.status(403).json({
         success: false,
         message: 'Votre compte est suspendu'
+      });
+    }
+
+    if (membre.archiver) {
+      return res.status(403).json({
+        success: false,
+        message: 'Votre compte a été archivé'
       });
     }
 
@@ -473,7 +497,7 @@ exports.login = async (req, res) => {
 exports.getMe = async (req, res) => {
   try {
     const membre = await Membre.findById(req.userId)
-      .select('-password -codeValidation -codeValidationExpire');
+      .select('-codeValidation -codeValidationExpire -resetPasswordToken -resetPasswordExpires');
     
     if (!membre) {
       return res.status(404).json({
@@ -535,8 +559,8 @@ exports.forgotPassword = async (req, res) => {
       });
     }
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    membre.resetPasswordToken = code;
+    const code = crypto.randomInt(100000, 1000000).toString();
+    membre.resetPasswordToken = hashResetCode(code);
     membre.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
     await membre.save();
 
@@ -575,11 +599,18 @@ exports.verifyResetCode = async (req, res) => {
 
     const membre = await Membre.findOne({
       email: email.toLowerCase(),
-      resetPasswordToken: code,
+      resetPasswordToken: { $exists: true },
       resetPasswordExpires: { $gt: new Date() }
     });
 
     if (!membre) {
+      return res.status(400).json({
+        success: false,
+        message: 'Code invalide ou expiré'
+      });
+    }
+
+    if (!verifyResetCode(code, membre.resetPasswordToken)) {
       return res.status(400).json({
         success: false,
         message: 'Code invalide ou expiré'
@@ -629,11 +660,18 @@ exports.resetPassword = async (req, res) => {
 
     const membre = await Membre.findOne({
       email: email.toLowerCase(),
-      resetPasswordToken: code,
+      resetPasswordToken: { $exists: true },
       resetPasswordExpires: { $gt: new Date() }
-    }).select('+password');
+    }).select('+password +resetPasswordToken');
 
     if (!membre) {
+      return res.status(400).json({
+        success: false,
+        message: 'Code invalide ou expiré'
+      });
+    }
+
+    if (!verifyResetCode(code, membre.resetPasswordToken)) {
       return res.status(400).json({
         success: false,
         message: 'Code invalide ou expiré'
@@ -755,8 +793,15 @@ exports.memberTokenLogin = async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const membre = await Membre.findById(decoded.id).select('-codeValidation -codeValidationExpire -resetPasswordToken -resetPasswordExpires');
 
-    if (!membre) {
-      return res.status(404).json({ success: false, message: 'Membre introuvable' });
+    // Un compte banni, suspendu, refusé ou archivé ne doit jamais obtenir de JWT,
+    // même avec un lien membre valide (§1.9.3).
+    if (!membre || membre.archiver || STATUTS_ACCES_REFUSES.includes(membre.status)) {
+      return res.status(403).json({ success: false, message: 'Compte indisponible' });
+    }
+    // La claim type est signe à la génération ; sans ce contrôle un jeton de
+    // vérification d'email serait structurellement interchangeable.
+    if (decoded.type !== 'member-link') {
+      return res.status(403).json({ success: false, message: 'Jeton invalide' });
     }
 
     const newToken = generateToken(membre._id);

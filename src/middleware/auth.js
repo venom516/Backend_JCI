@@ -80,4 +80,40 @@ const auth = async (req, res, next) => {
   }
 };
 
+// Remplit req.user si un token valide est present, sans jamais rejeter.
+// Necessaire pour les routes publiques qui doivent comportement differencie
+// entre visiteur anonyme et membre connecte (lecture d'une actualite) : avec
+// auth seul, req.user serait toujours undefined.
+const optionalAuth = async (req, res, next) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) return next();
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch {
+      // Token invalide ou expire : on reste anonyme plutot que de renvoyer 401
+      return next();
+    }
+
+    const membre = await Membre.findById(decoded.id);
+    if (!membre) return next();
+
+    // Compte inutilisable : reste anonyme, aucune erreur renvoyee
+    if (membre.status === 'banni' || membre.status === 'suspendu' || membre.archiver) {
+      return next();
+    }
+
+    req.user = membre;
+    req.userId = membre._id;
+    req.userRole = membre.role;
+    next();
+  } catch (error) {
+    console.error('❌ Erreur optionalAuth:', error);
+    next();
+  }
+};
+
 module.exports = auth;
+module.exports.optionalAuth = optionalAuth;

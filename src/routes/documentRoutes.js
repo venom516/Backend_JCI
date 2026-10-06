@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const role = require('../middleware/role');
-const upload = require('../middleware/upload');
+// Alias : le controleur expose deja un uploadDocument (§1.2)
+const { uploadDocument: uploadDoc } = require('../middleware/upload');
 const { validateObjectId } = require('../middleware/validation');
 const {
   uploadDocument,
@@ -37,7 +38,7 @@ router.post(
   '/',
   auth,
   role.isSecretaireGeneral,
-  upload.single('fichier'),
+  uploadDoc.single('fichier'),
   uploadDocument
 );
 
@@ -47,7 +48,7 @@ router.put(
   auth,
   role.isSecretaireGeneral,
   validateObjectId,
-  upload.single('fichier'),
+  uploadDoc.single('fichier'),
   updateDocument
 );
 

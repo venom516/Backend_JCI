@@ -1,6 +1,7 @@
 const News = require('../models/News');
 const Membre = require('../models/Membre');
 const { sendNewNewsEmail } = require('../config/email');
+const { pourRecherche } = require('../utils/search');
 
 // ============================================================
 // 1. CRÉER UNE ACTUALITÉ
@@ -51,8 +52,8 @@ exports.getNews = async (req, res) => {
     if (status) filter.status = status;
     if (search) {
       filter.$or = [
-        { titre: { $regex: search, $options: 'i' } },
-        { contenu: { $regex: search, $options: 'i' } }
+        { titre: { $regex: pourRecherche(search), $options: 'i' } },
+        { contenu: { $regex: pourRecherche(search), $options: 'i' } }
       ];
     }
 
@@ -139,8 +140,20 @@ exports.getNewsById = async (req, res) => {
       });
     }
 
-    news.views += 1;
-    await news.save();
+    // Un visiteur anonyme ne doit lire que le contenu publie. Un 404 (et non
+    // 403) pour un brouillon : un 403 confirme au visiteur que l'ID existe.
+    if (!req.user && news.status !== 'publiée') {
+      return res.status(404).json({
+        success: false,
+        message: 'Actualité non trouvée'
+      });
+    }
+
+    // Compter une vue par appel anonyme gonfle le compteur : reserve aux membres.
+    if (req.user) {
+      news.views += 1;
+      await news.save();
+    }
 
     res.json({
       success: true,

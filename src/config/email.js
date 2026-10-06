@@ -1,4 +1,4 @@
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const Membre = require('../models/Membre');
 const SiteConfig = require('../models/SiteConfig');
@@ -121,53 +121,53 @@ const iconValue = (svg, label, value) => `
 `;
 
 // ============================================================
-// CLIENT RESEND — API Transactionnelle
+// TRANSPORTEUR — Gmail SMTP, singleton, dégradé gracieux
 // ============================================================
 
-let resendReady = false;
+let transporter = null;
 
 console.log('');
-console.log('=== RESEND CONFIGURATION ===');
-console.log('RESEND_KEY : ' + (process.env.RESEND_KEY ? 'configurée' : 'absente'));
+console.log('=== SMTP CONFIGURATION ===');
 console.log('EMAIL_USER : ' + (process.env.EMAIL_USER ? 'configuré' : 'absent'));
+console.log('EMAIL_PASS : ' + (process.env.EMAIL_PASS ? 'configuré' : 'absent'));
 console.log('');
 
-const initResend = () => {
-  if (!process.env.RESEND_KEY || !process.env.EMAIL_USER) {
-    console.log('❌ Emails désactivés — RESEND_KEY ou EMAIL_USER manquant');
-    return;
-  }
-
-  resendReady = true;
-  console.log('✅ Resend prêt');
-};
-
-initResend();
+if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+  console.log('❌ Emails désactivés — EMAIL_USER ou EMAIL_PASS manquant');
+} else {
+  transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    }
+  });
+  console.log('✅ Transporteur Gmail prêt');
+}
 
 // ============================================================
 // FONCTION PRINCIPALE D'ENVOI
 // ============================================================
 
 const sendEmail = async (to, subject, html, text) => {
-  if (!resendReady) {
-    console.log('⏳ Resend indisponible, email non envoyé à', to);
+  if (!transporter) {
+    console.log('⏳ Email non configuré, email non envoyé à', to);
     return null;
   }
 
   try {
-    const resend = new Resend(process.env.RESEND_KEY);
-    await resend.emails.send({
-      from: `JCI Sidi Mansour <${process.env.EMAIL_USER}>`,
+    await transporter.sendMail({
+      from: `"JCI Sidi Mansour" <${process.env.EMAIL_USER}>`,
       to: [to],
       subject: subject,
       html: html || text,
-      text: text || html,
+      text: text || html
     });
     console.log('✅ Email envoyé à', to);
     return true;
-
   } catch (error) {
-    console.log('❌ Erreur d\'envoi à', to, ':', error.message);
+    // Jamais d'exception : un échec email ne doit pas faire echouer la requete metier
+    console.error('❌ Erreur d\'envoi à', to, ':', error.message);
     return false;
   }
 };

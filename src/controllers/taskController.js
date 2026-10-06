@@ -3,6 +3,7 @@
 const Task = require('../models/Task');
 const Membre = require('../models/Membre');
 const { sendTaskAssignmentEmail } = require('../config/email');
+const { pourRecherche } = require('../utils/search');
 
 // ============================================================
 // 1. CRÉER UNE TÂCHE (Tâche Normale)
@@ -87,7 +88,7 @@ exports.getTasks = async (req, res) => {
     if (taskType) filter.taskType = taskType;
     if (membre) filter.membre = membre;
     if (search) {
-      filter.titre = { $regex: search, $options: 'i' };
+      filter.titre = { $regex: pourRecherche(search), $options: 'i' };
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);

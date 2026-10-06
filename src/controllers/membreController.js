@@ -6,6 +6,7 @@ const Entretien = require('../models/Entretien');
 const Task = require('../models/Task');
 const Event = require('../models/Event');
 const News = require('../models/News');
+const { pourRecherche } = require('../utils/search');
 const { 
   sendEmail,
   sendEmailChangeVerification,
@@ -46,9 +47,9 @@ exports.getMembres = async (req, res) => {
     if (role) filter.role = role;
     if (search) {
       filter.$or = [
-        { nom: { $regex: search, $options: 'i' } },
-        { prenom: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
+        { nom: { $regex: pourRecherche(search), $options: 'i' } },
+        { prenom: { $regex: pourRecherche(search), $options: 'i' } },
+        { email: { $regex: pourRecherche(search), $options: 'i' } }
       ];
     }
     
@@ -212,34 +213,35 @@ exports.updateMembre = async (req, res) => {
       req.body.status = 'suspendu';
     }
 
-    // Upload photo to Cloudinary if base64
-    if (req.body.photo && req.body.photo.startsWith('data:')) {
-      const result = await cloudinary.uploader.upload(req.body.photo, { folder: 'jci-uploads/members' });
-      req.body.photo = result.secure_url;
+    // Photo : base64 uniquement, jamais une URL distante fournie par le client (§1.9.4)
+    let photoBase64 = null;
+    if (typeof req.body.photo === 'string' && req.body.photo.startsWith('data:')) {
+      photoBase64 = req.body.photo;
     }
 
-    // Liste blanche d'écriture (§4.5) : un membre ne peut pas s'auto-attribuer
-    // isEmailVerified / archiver / status / role / tokens de reset.
-    const SELF_UPDATABLE_FIELDS = [
-      'nom', 'prenom', 'email', 'telephone', 'adresse', 'situationProfessionnelle',
-      'dateNaissance', 'urlFacebook', 'urlLinkedIn', 'photo', 'langues', 'competences',
-      'pointsForts', 'societe', 'hobbies', 'association', 'connaissanceZone',
-      'connaissanceJCI', 'pointsDeveloppement', 'parrainId', 'parrain'
+    // Liste blanche d'écriture (§1.9.4). photo est traite a part : base64 uniquement.
+    const CHAMPS_EDITABLES = [
+      'nom', 'prenom', 'email', 'telephone', 'adresse', 'sexe',
+      'situationProfessionnelle', 'travailOuEtude', 'dateNaissance',
+      'urlFacebook', 'urlLinkedIn', 'langues', 'competences', 'pointsForts',
+      'societe', 'hobbies', 'association', 'connaissanceZone',
+      'connaissanceJCI', 'pointsDeveloppement'
     ];
-    const PRIVILEGED_FIELDS = [
+    const CHAMPS_PRIVES = [
       'role', 'status', 'archiver', 'isEmailVerified', 'codeValidation',
       'codeValidationExpire', 'resetPasswordToken', 'resetPasswordExpires',
-      'mandatAnnee', 'datePriseFonction', 'lastLogin'
+      'mandatAnnee', 'mandatFin', 'datePriseFonction', 'lastLogin',
+      'parrainId', 'parrain'
     ];
 
     const { password, ...rest } = req.body;
     const updateData = {};
-    for (const field of SELF_UPDATABLE_FIELDS) {
-      if (rest[field] !== undefined) updateData[field] = rest[field];
+    for (const champ of CHAMPS_EDITABLES) {
+      if (rest[champ] !== undefined) updateData[champ] = rest[champ];
     }
     if (req.userRole === 'President') {
-      for (const field of PRIVILEGED_FIELDS) {
-        if (rest[field] !== undefined) updateData[field] = rest[field];
+      for (const champ of CHAMPS_PRIVES) {
+        if (rest[champ] !== undefined) updateData[champ] = rest[champ];
       }
     }
 
@@ -247,6 +249,11 @@ exports.updateMembre = async (req, res) => {
     if (emailChanged) {
       updateData.isEmailVerified = false;
       updateData.status = 'suspendu';
+    }
+
+    if (photoBase64) {
+      const result = await cloudinary.uploader.upload(photoBase64, { folder: 'jci-uploads/members' });
+      updateData.photo = result.secure_url;
     }
 
     let updated;

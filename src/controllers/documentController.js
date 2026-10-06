@@ -1,6 +1,7 @@
 const Document = require('../models/Document');
 const Membre = require('../models/Membre');
 const { sendNewDocumentEmail } = require('../config/email');
+const { pourRecherche } = require('../utils/search');
 
 // ============================================================
 // 1. UPLOAD DOCUMENT (creerDocument + insertDocument)
@@ -81,8 +82,8 @@ exports.getDocuments = async (req, res) => {
     if (status) filter.status = status;
     if (search) {
       filter.$or = [
-        { titre: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { titre: { $regex: pourRecherche(search), $options: 'i' } },
+        { description: { $regex: pourRecherche(search), $options: 'i' } }
       ];
     }
 

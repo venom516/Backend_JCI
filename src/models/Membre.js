@@ -16,7 +16,7 @@ const membreSchema = new mongoose.Schema({
   status: { 
     type: String, 
     enum: ['non-inscrit', 'en-attente', 'actif', 'suspendu', 'banni', 'refusé', 'inactif', 'non-validé'], 
-    default: 'en-attente' 
+    default: 'non-inscrit' 
   },
   archiver: { type: Boolean, default: false },
   isEmailVerified: { type: Boolean, default: false },
@@ -24,7 +24,9 @@ const membreSchema = new mongoose.Schema({
   codeValidationExpire: { type: Date, select: false },
   telephone: { type: String, trim: true },
   adresse: { type: String, trim: true },
+  sexe: { type: String, trim: true },
   situationProfessionnelle: { type: String, trim: true },
+  travailOuEtude: { type: String, trim: true },
   dateNaissance: { type: Date },
   urlFacebook: { type: String },
   urlLinkedIn: { type: String },
@@ -41,6 +43,7 @@ const membreSchema = new mongoose.Schema({
   parrainId: { type: mongoose.Schema.Types.ObjectId, ref: 'Membre' },
   parrain: { type: String, trim: true },
   datePriseFonction: { type: Date },
+  mandatFin: { type: Date },
   mandatAnnee: { type: Number },
   resetPasswordToken: { type: String, select: false },
   resetPasswordExpires: { type: Date, select: false },
@@ -50,9 +53,13 @@ const membreSchema = new mongoose.Schema({
 // Hash password avant sauvegarde
 membreSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
+  try {
+    const salt = await bcrypt.genSalt(12);
+    this.password = await bcrypt.hash(this.password, salt);
+    return next();
+  } catch (err) {
+    return next(err);
+  }
 });
 
 // Comparer password
