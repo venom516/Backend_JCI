@@ -3,7 +3,15 @@
 const Task = require('../models/Task');
 const Membre = require('../models/Membre');
 const { sendTaskAssignmentEmail } = require('../config/email');
+<<<<<<< HEAD
 const { isValidTransition } = require('../services/stateMachine');
+=======
+<<<<<<< HEAD
+const { isValidTransition } = require('../services/stateMachine');
+=======
+const { pourRecherche } = require('../utils/search');
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
+>>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
 
 // ============================================================
 // 1. CRÉER UNE TÂCHE (Tâche Normale)
@@ -88,7 +96,7 @@ exports.getTasks = async (req, res) => {
     if (taskType) filter.taskType = taskType;
     if (membre) filter.membre = membre;
     if (search) {
-      filter.titre = { $regex: search, $options: 'i' };
+      filter.titre = { $regex: pourRecherche(search), $options: 'i' };
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -163,7 +171,10 @@ exports.updateTask = async (req, res) => {
       });
     }
 
-    if (task.createdBy.toString() !== req.userId && req.userRole !== 'President') {
+    const canEdit = req.userRole === 'President'
+      || req.userRole === 'VPFD'
+      || task.createdBy.toString() === req.userId;
+    if (!canEdit) {
       return res.status(403).json({
         success: false,
         message: 'Vous n\'êtes pas autorisé à modifier cette tâche'
@@ -260,7 +271,7 @@ exports.deleteTask = async (req, res) => {
       });
     }
 
-    if (task.createdBy.toString() !== req.userId && req.userRole !== 'President') {
+    if (task.createdBy.toString() !== req.userId && req.userRole !== 'President' && req.userRole !== 'VPFD') {
       return res.status(403).json({
         success: false,
         message: 'Vous n\'êtes pas autorisé à supprimer cette tâche'
@@ -592,6 +603,7 @@ exports.notifyMediaTasks = async (req, res) => {
         message: 'Impossible de notifier ce membre : compte archivé'
       });
     }
+<<<<<<< HEAD
 
     const { sendTaskReminderEmail } = require('../config/email');
     await sendTaskReminderEmail(task.membre.email, task.membre, task);
@@ -599,10 +611,27 @@ exports.notifyMediaTasks = async (req, res) => {
     task.notificationSent = true;
     task.notificationDate = new Date();
     await task.save();
+=======
+>>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
 
-    res.json({
-      success: true,
-      message: `✅ Notification envoyée avec succès à ${task.membre.email}`
+    const { sendTaskReminderEmail } = require('../config/email');
+    const envoye = await sendTaskReminderEmail(task.membre.email, task.membre, task);
+
+    // 6.4 : ne marquer que sur un envoi reussi et ne pas annoncer un succes
+    // que le serveur n'a pas produit. Un template suspendu renvoie null.
+    if (envoye === true) {
+      task.notificationSent = true;
+      task.notificationDate = new Date();
+      await task.save();
+      return res.json({
+        success: true,
+        message: `✅ Notification envoyée avec succès à ${task.membre.email}`
+      });
+    }
+
+    res.status(502).json({
+      success: false,
+      message: 'Notification non envoyée (template suspendu ou service email indisponible)'
     });
   } catch (error) {
     console.error('❌ Erreur notifyMediaTasks:', error);

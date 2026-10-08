@@ -1,7 +1,16 @@
 const Document = require('../models/Document');
 const Membre = require('../models/Membre');
 const { sendEmail, sendNewDocumentEmail } = require('../config/email');
+<<<<<<< HEAD
 const { isValidTransition } = require('../services/stateMachine');
+=======
+<<<<<<< HEAD
+const { isValidTransition } = require('../services/stateMachine');
+=======
+const { pourRecherche } = require('../utils/search');
+const { escapeHtml } = require('../utils/html');
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
+>>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
 
 // ============================================================
 // 1. UPLOAD DOCUMENT (creerDocument + insertDocument)
@@ -87,8 +96,8 @@ exports.getDocuments = async (req, res) => {
     if (status) filter.status = status;
     if (search) {
       filter.$or = [
-        { titre: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { titre: { $regex: pourRecherche(search), $options: 'i' } },
+        { description: { $regex: pourRecherche(search), $options: 'i' } }
       ];
     }
 
@@ -274,6 +283,10 @@ exports.approveDocument = async (req, res) => {
     await document.save();
 
     // Notifier le créateur
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
 const creator = await Membre.findById(document.createdBy);
       if (creator) {
         try {
@@ -286,6 +299,19 @@ const creator = await Membre.findById(document.createdBy);
           console.warn('Notification non envoyée au créateur:', mailError.message);
         }
       }
+<<<<<<< HEAD
+=======
+=======
+    const creator = await Membre.findById(document.createdBy);
+    if (creator) {
+      await sendEmail(
+        creator.email,
+        `✅ Document approuvé: ${document.titre}`,
+        `<p>Votre document "${escapeHtml(document.titre)}" a été approuvé.</p>`
+      );
+    }
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
+>>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
 
     res.json({
       success: true,

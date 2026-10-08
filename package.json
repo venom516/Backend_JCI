@@ -25,7 +25,15 @@
     "multer": "^2.2.0",
     "multer-storage-cloudinary": "^4.0.0",
     "node-cron": "^4.5.0",
+<<<<<<< HEAD
     "nodemailer": "^9.0.3",
+=======
+<<<<<<< HEAD
+    "nodemailer": "^9.0.3",
+=======
+    "nodemailer": "^10.0.15",
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
+>>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
     "sharp": "^0.35.2",
     "validator": "^13.15.35"
   },

@@ -2,6 +2,13 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const role = require('../middleware/role');
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+// Alias : le controleur expose deja un uploadDocument (§1.2)
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
+>>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
 const { uploadDocument: uploadDoc } = require('../middleware/upload');
 const { validateObjectId } = require('../middleware/validation');
 const {

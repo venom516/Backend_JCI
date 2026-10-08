@@ -1,6 +1,10 @@
 const Event = require('../models/Event');
 const Membre = require('../models/Membre');
 const { sendNewEventEmail } = require('../config/email');
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
 const { isValidTransition } = require('../services/stateMachine');
 
 /**
@@ -20,6 +24,12 @@ const peutGererEvent = (req, event) => {
   if (!event || !event.createdBy || !req.userId) return false;
   return String(event.createdBy) === String(req.userId);
 };
+<<<<<<< HEAD
+=======
+=======
+const { pourRecherche } = require('../utils/search');
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
+>>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
 
 // ============================================================
 // 1. CRÉER UN ÉVÉNEMENT
@@ -104,8 +114,8 @@ exports.getEvents = async (req, res) => {
     if (status) filter.status = status;
     if (search) {
       filter.$or = [
-        { titre: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { titre: { $regex: pourRecherche(search), $options: 'i' } },
+        { description: { $regex: pourRecherche(search), $options: 'i' } }
       ];
     }
 
