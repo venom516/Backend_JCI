@@ -72,9 +72,9 @@ const entretienRoutes = require('./routes/entretienRoutes');
 const publicationRoutes = require('./routes/publicationRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const contactRoutes = require('./routes/contactRoutes');
-const formationRoutes = require('./routes/formationRoutes');
 const socialRoutes = require('./routes/socialRoutes');
 const calendarRoutes = require('./routes/calendarRoutes');
+const imageRoutes = require('./routes/imageRoutes');
 
 // Utilisation des routes
 app.use('/api/auth', authRoutes);
@@ -88,8 +88,8 @@ app.use('/api/publications', publicationRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/social', socialRoutes);
-app.use('/api/formations', formationRoutes);
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/images', imageRoutes);
 
 // ============ GESTION DES ERREURS ============
 

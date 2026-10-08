@@ -59,6 +59,13 @@ const auth = async (req, res, next) => {
       });
     }
 
+    if (membre.archiver) {
+      return res.status(403).json({
+        success: false,
+        message: 'Votre compte a été archivé'
+      });
+    }
+
     // Ajouter l'utilisateur à la requête
     req.user = membre;
     req.userId = membre._id;

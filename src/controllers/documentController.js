@@ -1,6 +1,7 @@
 const Document = require('../models/Document');
 const Membre = require('../models/Membre');
-const { sendNewDocumentEmail } = require('../config/email');
+const { sendEmail, sendNewDocumentEmail } = require('../config/email');
+const { isValidTransition } = require('../services/stateMachine');
 
 // ============================================================
 // 1. UPLOAD DOCUMENT (creerDocument + insertDocument)
@@ -42,14 +43,19 @@ exports.uploadDocument = async (req, res) => {
     // Récupérer les emails des destinataires (Président + SG)
     const admins = await Membre.find({
       role: { $in: ['President', 'SecretaireGeneral'] },
-      status: 'actif'
+      status: 'actif',
+      archiver: { $ne: true }
     });
     const emails = admins.map(m => m.email);
 
     // Envoyer les emails
     if (emails.length > 0) {
-      await sendNewDocumentEmail(emails, document, req.user);
-      console.log(`📧 Email envoyé à ${emails.length} administrateurs`);
+      try {
+        await sendNewDocumentEmail(emails, document, req.user);
+        console.log(`Email envoyé à ${emails.length} administrateurs`);
+      } catch (mailError) {
+        console.warn('Notification non envoyée aux administrateurs:', mailError.message);
+      }
     }
 
     // Afficher succès
@@ -250,18 +256,36 @@ exports.approveDocument = async (req, res) => {
       });
     }
 
+    // Idempotence : un double clic sur Approuver ne doit pas renvoyer une erreur.
+      if (document.status === 'approuvé') {
+        return res.json({
+          success: true,
+          message: 'Document déjà approuvé',
+          data: document
+        });
+      }
+
+      const validation = isValidTransition('document', document.status, 'approuvé');
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: validation.message });
+    }
+
     document.status = 'approuvé';
     await document.save();
 
     // Notifier le créateur
-    const creator = await Membre.findById(document.createdBy);
-    if (creator) {
-      await sendEmail(
-        creator.email,
-        `✅ Document approuvé: ${document.titre}`,
-        `<p>Votre document "${document.titre}" a été approuvé.</p>`
-      );
-    }
+const creator = await Membre.findById(document.createdBy);
+      if (creator) {
+        try {
+          await sendEmail(
+            creator.email,
+            `Document approuvé: ${document.titre}`,
+            `<p>Votre document "${document.titre}" a été approuvé.</p>`
+          );
+        } catch (mailError) {
+          console.warn('Notification non envoyée au créateur:', mailError.message);
+        }
+      }
 
     res.json({
       success: true,
@@ -297,6 +321,11 @@ exports.archiveDocument = async (req, res) => {
       });
     }
 
+    const validation = isValidTransition('document', document.status, 'archivé');
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: validation.message });
+    }
+
     document.status = 'archivé';
     await document.save();
 
@@ -315,7 +344,57 @@ exports.archiveDocument = async (req, res) => {
 };
 
 // ============================================================
-// 8. DOWNLOAD DOCUMENT
+// 8. SOUMETTRE DOCUMENT (brouillon → en-attente)
+// ============================================================
+exports.soumettreDocument = async (req, res) => {
+  try {
+    const document = await Document.findById(req.params.id);
+    if (!document) {
+      return res.status(404).json({ success: false, message: 'Document non trouvé' });
+    }
+    if (document.createdBy.toString() !== req.userId && req.userRole !== 'President') {
+      return res.status(403).json({ success: false, message: 'Accès non autorisé' });
+    }
+    const validation = isValidTransition('document', document.status, 'en-attente');
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: validation.message });
+    }
+    document.status = 'en-attente';
+    await document.save();
+    res.json({ success: true, message: 'Document soumis pour validation', data: document });
+  } catch (error) {
+    console.error('❌ Erreur soumettreDocument:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+};
+
+// ============================================================
+// 9. REJETER DOCUMENT (en-attente → brouillon)
+// ============================================================
+exports.rejeterDocument = async (req, res) => {
+  try {
+    const document = await Document.findById(req.params.id);
+    if (!document) {
+      return res.status(404).json({ success: false, message: 'Document non trouvé' });
+    }
+    if (req.userRole !== 'SecretaireGeneral' && req.userRole !== 'President') {
+      return res.status(403).json({ success: false, message: 'Seul le SG ou Président peut rejeter' });
+    }
+    const validation = isValidTransition('document', document.status, 'brouillon');
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: validation.message });
+    }
+    document.status = 'brouillon';
+    await document.save();
+    res.json({ success: true, message: 'Document renvoyé en brouillon', data: document });
+  } catch (error) {
+    console.error('❌ Erreur rejeterDocument:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+};
+
+// ============================================================
+// 10. DOWNLOAD DOCUMENT
 // ============================================================
 exports.downloadDocument = async (req, res) => {
   try {
@@ -327,7 +406,54 @@ exports.downloadDocument = async (req, res) => {
       });
     }
 
-    res.redirect(document.fichier);
+    const fichier = document.fichier;
+    if (!fichier) {
+      return res.status(404).json({
+        success: false,
+        message: 'Aucun fichier associé à ce document'
+      });
+    }
+
+    // Les anciens documents stockent un simple nom de fichier : il faut
+    // reconstruire l'URL /uploads, sinon le navigateur résout la redirection
+    // contre la route /api/documents/:id et renvoie une erreur 400/500.
+    let cible = fichier;
+    if (!/^https?:\/\//i.test(fichier)) {
+      cible = fichier.startsWith('/uploads/') ? fichier : '/uploads/' + String(fichier).replace(/^\/+/, '');
+      return res.redirect(cible);
+    }
+
+    const nomFichier = document.fichierNom || 'document';
+    const extension = String(nomFichier).split('.').pop().toLowerCase();
+    const types = {
+      pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      doc: 'application/msword', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      xls: 'application/vnd.ms-excel', txt: 'text/plain',
+      jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+      mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
+    };
+    const typeMime = types[extension] || 'application/octet-stream';
+
+    try {
+      const reponse = await fetch(cible);
+      if (!reponse.ok) {
+        return res.status(502).json({
+          success: false,
+          message: `Fichier introuvable sur le stockage (${reponse.status})`
+        });
+      }
+      const buffer = Buffer.from(await reponse.arrayBuffer());
+      res.setHeader('Content-Type', typeMime);
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(nomFichier)}"`);
+      return res.send(buffer);
+    } catch (erreur) {
+      console.error('❌ Erreur lecture Cloudinary:', erreur);
+      return res.status(502).json({
+        success: false,
+        message: 'Impossible de récupérer le fichier depuis le stockage'
+      });
+    }
   } catch (error) {
     console.error('❌ Erreur downloadDocument:', error);
     res.status(500).json({

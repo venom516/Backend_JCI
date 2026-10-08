@@ -1,4 +1,4 @@
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const Membre = require('../models/Membre');
 const SiteConfig = require('../models/SiteConfig');
@@ -21,6 +21,8 @@ const getMemberLink = (membre, page = 'dashboard') => {
 const FRONTEND_URL = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',')[0].trim()
   : 'http://localhost:5173';
+
+const getLoginLink = () => `${FRONTEND_URL}/login`;
 
 // ============================================================
 // SVG ICONS - Professionnels, compatibles email
@@ -121,52 +123,65 @@ const iconValue = (svg, label, value) => `
 `;
 
 // ============================================================
-// CLIENT RESEND — API Transactionnelle
+// TRANSPORTEUR NODEMAILER (Gmail SMTP)
 // ============================================================
 
-let resendReady = false;
+let transporter = null;
 
 console.log('');
-console.log('=== RESEND CONFIGURATION ===');
-console.log('User configuré: ' + (process.env.EMAIL_USER ? 'oui' : 'non'));
+console.log('=== EMAIL CONFIGURATION (Nodemailer) ===');
+console.log('EMAIL_USER : ' + (process.env.EMAIL_USER ? 'configuré' : 'absent'));
+console.log('EMAIL_PASS : ' + (process.env.EMAIL_PASS ? 'configuré' : 'absent'));
 console.log('');
 
-const initResend = () => {
-  if (!process.env.RESEND_KEY || !process.env.EMAIL_USER) {
-    console.log('⚠️ RESEND_KEY ou EMAIL_USER non défini — emails désactivés');
+const initTransporter = () => {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.log('❌ Emails désactivés — EMAIL_USER ou EMAIL_PASS manquant');
     return;
   }
 
-  resendReady = true;
-  console.log('✅ Resend API prêt');
+  transporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.EMAIL_PORT || '587'),
+    secure: false,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+
+  transporter.verify().then(() => {
+    console.log('✅ Transporteur email prêt (Gmail SMTP)');
+  }).catch((err) => {
+    console.log('❌ Erreur vérification transporteur:', err.message);
+  });
 };
 
-initResend();
+initTransporter();
 
 // ============================================================
 // FONCTION PRINCIPALE D'ENVOI
 // ============================================================
 
 const sendEmail = async (to, subject, html, text) => {
-  if (!resendReady) {
-    console.log('⏳ Resend indisponible, email non envoyé à', to);
+  if (!transporter) {
+    console.log('⏳ Transporteur indisponible, email non envoyé à', to);
     return null;
   }
 
   try {
-    const resend = new Resend(process.env.RESEND_KEY);
-    await resend.emails.send({
-      from: `JCI Sidi Mansour <${process.env.EMAIL_USER}>`,
-      to: [to],
+    await transporter.sendMail({
+      from: process.env.EMAIL_FROM || `"JCI Sidi Mansour" <${process.env.EMAIL_USER}>`,
+      to: to,
       subject: subject,
       html: html || text,
       text: text || html,
     });
-    console.log('📧 Email envoyé avec succès à', to);
+    console.log('✅ Email envoyé à', to);
     return true;
 
   } catch (error) {
-    console.log("❌ Erreur envoi email :", error.message);
+    console.log('❌ Erreur d\'envoi à', to, ':', error.message);
     return false;
   }
 };
@@ -214,7 +229,7 @@ const sendNewMemberNotificationToPresident = async (presidentEmail, membre) => {
       ${iconValue(SVG.tag, 'Situation', membre.situationProfessionnelle || 'Non renseigné')}
     </div>
     <div style="text-align: center; margin: 12px 0;">
-      <a href="${FRONTEND_URL}/auth/president-link?token=${presidentToken}&tab=entretiens" style="${STYLES.btn} ${STYLES.btnOutline}">Gérer les inscriptions</a>
+      <a href="${FRONTEND_URL}/auth/president-link?token=${presidentToken}&membreId=${membre._id}" style="${STYLES.btn} ${STYLES.btnPrimary}; margin-bottom: 8px;">Ajouter un entretien</a>
     </div>
   `);
   return sendEmail(presidentEmail, subject, html);
@@ -260,17 +275,40 @@ const sendInterviewEmail = async (membre, entretien) => {
   const subject = 'Entretien de bienvenue - JCI Sidi Mansour';
   const html = emailLayout('Entretien de bienvenue', `
     <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
-    <p style="${STYLES.paragraph}">Votre inscription a été acceptée par le Président. Un entretien de bienvenue a été planifié pour vous accueillir.</p>
+    <p style="${STYLES.paragraph}">Un entretien de bienvenue a été planifié pour vous accueillir au sein de JCI Sidi Mansour.</p>
     <div style="${STYLES.cardGreen}">
-      ${iconValue(SVG.calendar, 'Date', new Date(entretien.date).toLocaleString('fr-FR'))}
+      ${iconValue(SVG.calendar, 'Date de début', new Date(entretien.date).toLocaleString('fr-FR'))}
+      ${entretien.dateFin ? iconValue(SVG.calendar, 'Date de fin', new Date(entretien.dateFin).toLocaleString('fr-FR')) : ''}
       ${iconValue(SVG.pin, 'Lieu', lieu)}
       ${iconValue(SVG.clipboard, 'Commentaire', entretien.commentaire || 'Aucun commentaire')}
     </div>
-    <p style="${STYLES.paragraph}">Votre compte est en attente de validation finale après l'entretien.</p>
+    <p style="${STYLES.paragraph}">Merci de vous présenter à la date et au lieu indiqués.</p>
   `);
   return sendEmail(membre.email, subject, html);
 };
 
+// ============================================================
+// 3b. ENTRETIEN MODIFIÉ
+// ============================================================
+const sendInterviewUpdatedEmail = async (membre, entretien) => {
+  const lieu = entretien.lieu || await getLieuEntretien();
+  const subject = 'Votre entretien a été mis à jour - JCI Sidi Mansour';
+  const html = emailLayout('Entretien mis à jour', `
+    <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
+    <p style="${STYLES.paragraph}">Les informations de votre entretien ont été modifiées par le Président. Veuillez en prendre note :</p>
+    <div style="${STYLES.card}">
+      ${iconValue(SVG.calendar, 'Date de début', new Date(entretien.date).toLocaleString('fr-FR'))}
+      ${entretien.dateFin ? iconValue(SVG.calendar, 'Date de fin', new Date(entretien.dateFin).toLocaleString('fr-FR')) : ''}
+      ${iconValue(SVG.pin, 'Lieu', lieu)}
+      ${iconValue(SVG.clipboard, 'Commentaire', entretien.commentaire || 'Aucun commentaire')}
+    </div>
+    <p style="${STYLES.paragraph}">Merci de vous présenter à la date et au lieu indiqués.</p>
+  `);
+  return sendEmail(membre.email, subject, html);
+};
+
+// ============================================================
+// 3b. ENTRETIEN MODIFIÉ
 // ============================================================
 // 4. VALIDATION CONFIRMÉE AU PRÉSIDENT
 // ============================================================
@@ -311,10 +349,11 @@ const sendValidationAccepteeEmail = async (membre) => {
   const html = emailLayout('Inscription validée', `
     <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
     <p style="${STYLES.paragraph}">Votre inscription à JCI Sidi Mansour a été acceptée par le Président.</p>
-    <p style="${STYLES.paragraph}">Vous pouvez dès maintenant accéder à votre espace personnel et participer aux activités de l'association.</p>
+    <p style="${STYLES.paragraph}">Votre compte est maintenant actif : connectez-vous avec votre adresse email et votre mot de passe pour accéder à votre espace personnel et participer aux activités de l'association.</p>
     <div style="text-align: center; margin: 20px 0;">
-      <a href="${getMemberLink(membre, 'dashboard')}" style="${STYLES.btn} ${STYLES.btnPrimary}">Accéder à mon espace</a>
+      <a href="${getLoginLink()}" style="${STYLES.btn} ${STYLES.btnPrimary}">Ouvrir la page de connexion</a>
     </div>
+    <p style="color: #94A3B8; font-size: 12px; text-align: center; margin: 0;">Si vous n'avez pas encore défini votre mot de passe, utilisez le lien « Mot de passe oublié » sur la page de connexion.</p>
   `);
   return sendEmail(membre.email, subject, html);
 };
@@ -377,132 +416,100 @@ const sendReactivationEmail = async (email, nom, prenom, membreId) => {
 // 8. NOUVEAU DOCUMENT
 // ============================================================
 
-const sendNewDocumentEmail = async (emails, document, user) => {
-  const subject = `Nouveau document: ${document.titre}`;
-  for (const email of emails) {
-    let membreLink = `${FRONTEND_URL}/documents`;
-    try {
-      const membre = await Membre.findOne({ email }).select('_id prenom nom');
-      if (membre) membreLink = getMemberLink(membre, 'dashboard');
-    } catch {}
-    const html = emailLayout('Nouveau document', `
-      <p style="${STYLES.paragraph}">Un nouveau document a été uploadé sur la plateforme.</p>
-      <div style="${STYLES.card}">
-        ${iconValue(SVG.document, 'Titre', document.titre)}
-        ${iconValue(SVG.tag, 'Type', document.type)}
-        ${iconValue(SVG.clipboard, 'Description', document.description || 'Aucune description')}
-        ${iconValue(SVG.user, 'Uploadé par', `${user.prenom} ${user.nom}`)}
-        ${iconValue(SVG.calendar, 'Date', new Date().toLocaleString())}
-        ${iconValue(SVG.upload, 'Fichier', document.fichierNom || 'Non spécifié')}
-        ${iconValue(SVG.tag, 'Taille', document.fichierTaille ? `${(document.fichierTaille / 1024).toFixed(2)} KB` : 'Non spécifié')}
-      </div>
-      <div style="text-align: center; margin: 20px 0;">
-        <a href="${membreLink}" style="${STYLES.btn} ${STYLES.btnPrimary}">Voir les documents</a>
-      </div>
-    `);
-    await sendEmail(email, subject, html);
-  }
-  return true;
-};
+// const sendNewDocumentEmail = async (emails, document, user) => {
+//   const subject = `Nouveau document: ${document.titre}`;
+//   for (const email of emails) {
+//     let membreLink = `${FRONTEND_URL}/documents`;
+//     try {
+//       const membre = await Membre.findOne({ email }).select('_id prenom nom');
+//       if (membre) membreLink = getMemberLink(membre, 'dashboard');
+//     } catch {}
+//     const html = emailLayout('Nouveau document', `
+//       <p style="${STYLES.paragraph}">Un nouveau document a été uploadé sur la plateforme.</p>
+//       <div style="${STYLES.card}">
+//         ${iconValue(SVG.document, 'Titre', document.titre)}
+//         ${iconValue(SVG.tag, 'Type', document.type)}
+//         ${iconValue(SVG.clipboard, 'Description', document.description || 'Aucune description')}
+//         ${iconValue(SVG.user, 'Uploadé par', `${user.prenom} ${user.nom}`)}
+//         ${iconValue(SVG.calendar, 'Date', new Date().toLocaleString())}
+//         ${iconValue(SVG.upload, 'Fichier', document.fichierNom || 'Non spécifié')}
+//         ${iconValue(SVG.tag, 'Taille', document.fichierTaille ? `${(document.fichierTaille / 1024).toFixed(2)} KB` : 'Non spécifié')}
+//       </div>
+//       <div style="text-align: center; margin: 20px 0;">
+//         <a href="${membreLink}" style="${STYLES.btn} ${STYLES.btnPrimary}">Voir les documents</a>
+//       </div>
+//     `);
+//     await sendEmail(email, subject, html);
+//   }
+//   return true;
+// };
 
 // ============================================================
 // 9. NOUVELLE TÂCHE ASSIGNÉE
 // ============================================================
 
-const sendTaskAssignmentEmail = async (email, membre, task) => {
-  const subject = `Nouvelle tâche: ${task.titre}`;
-  const html = emailLayout('Nouvelle tâche assignée', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
-    <p style="${STYLES.paragraph}">Une nouvelle tâche vous a été assignée.</p>
-    <div style="${STYLES.card}">
-      ${iconValue(SVG.clipboard, 'Titre', task.titre)}
-      ${iconValue(SVG.clipboard, 'Description', task.description || 'Aucune description')}
-      ${iconValue(SVG.clock, 'Deadline', new Date(task.deadline).toLocaleString())}
-      ${iconValue(SVG.tag, 'Priorité', task.priority || 'Moyenne')}
-      ${iconValue(SVG.document, 'Type', task.type || 'Task Normale')}
-    </div>
-    <div style="text-align: center; margin: 20px 0;">
-      <a href="${getMemberLink(membre, 'tasks')}" style="${STYLES.btn} ${STYLES.btnPrimary}">Voir mes tâches</a>
-    </div>
-  `);
-  return sendEmail(email, subject, html);
-};
+// const sendTaskAssignmentEmail = async (email, membre, task) => {
+//   const subject = `Nouvelle tâche: ${task.titre}`;
+//   const html = emailLayout('Nouvelle tâche assignée', `
+//     <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
+//     <p style="${STYLES.paragraph}">Une nouvelle tâche vous a été assignée.</p>
+//     <div style="${STYLES.card}">
+//       ${iconValue(SVG.clipboard, 'Titre', task.titre)}
+//       ${iconValue(SVG.clipboard, 'Description', task.description || 'Aucune description')}
+//       ${iconValue(SVG.clock, 'Deadline', new Date(task.deadline).toLocaleString())}
+//       ${iconValue(SVG.tag, 'Priorité', task.priority || 'Moyenne')}
+//       ${iconValue(SVG.document, 'Type', task.type || 'Task Normale')}
+//     </div>
+//     <div style="text-align: center; margin: 20px 0;">
+//       <a href="${getMemberLink(membre, 'tasks')}" style="${STYLES.btn} ${STYLES.btnPrimary}">Voir mes tâches</a>
+//     </div>
+//   `);
+//   return sendEmail(email, subject, html);
+// };
 
 // ============================================================
 // 10. NOUVEL ÉVÉNEMENT
 // ============================================================
 
-const sendNewEventEmail = async (email, membre, event) => {
-  const subject = `Nouvel événement: ${event.titre}`;
-  const html = emailLayout('Nouvel événement', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
-    <p style="${STYLES.paragraph}">Un nouvel événement a été créé sur la plateforme.</p>
-    <div style="${STYLES.card}">
-      ${iconValue(SVG.calendar, 'Titre', event.titre)}
-      ${iconValue(SVG.tag, 'Type', event.type)}
-      ${iconValue(SVG.clipboard, 'Description', event.description || 'Aucune description')}
-      ${iconValue(SVG.calendar, 'Date', new Date(event.date).toLocaleString())}
-      ${iconValue(SVG.pin, 'Lieu', event.lieu)}
-    </div>
-    <div style="text-align: center; margin: 20px 0;">
-      <a href="${getMemberLink(membre, 'events')}" style="${STYLES.btn} ${STYLES.btnPrimary}">Voir les événements</a>
-    </div>
-  `);
-  return sendEmail(email, subject, html);
-};
+// const sendNewEventEmail = async (email, membre, event) => {
+//   const subject = `Nouvel événement: ${event.titre}`;
+//   const html = emailLayout('Nouvel événement', `
+//     <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
+//     <p style="${STYLES.paragraph}">Un nouvel événement a été créé sur la plateforme.</p>
+//     <div style="${STYLES.card}">
+//       ${iconValue(SVG.calendar, 'Titre', event.titre)}
+//       ${iconValue(SVG.tag, 'Type', event.type)}
+//       ${iconValue(SVG.clipboard, 'Description', event.description || 'Aucune description')}
+//       ${iconValue(SVG.calendar, 'Date', new Date(event.date).toLocaleString())}
+//       ${iconValue(SVG.pin, 'Lieu', event.lieu)}
+//     </div>
+//     <div style="text-align: center; margin: 20px 0;">
+//       <a href="${getMemberLink(membre, 'events')}" style="${STYLES.btn} ${STYLES.btnPrimary}">Voir les événements</a>
+//     </div>
+//   `);
+//   return sendEmail(email, subject, html);
+// };
+
+
 
 // ============================================================
-// 11. DEMANDE D'ENTRETIEN
+// 12. ENTRETIEN TERMINÉ - ADMISSION ACCEPTÉE
 // ============================================================
-
-const sendEntretienRequestEmail = async (presidentEmail, membre, entretien) => {
-  const subject = `Demande d'entretien: ${membre.prenom} ${membre.nom}`;
-  const html = emailLayout('Demande d\'entretien', `
-    <p style="${STYLES.paragraph}">Un membre a demandé un entretien.</p>
-    <div style="${STYLES.card}">
-      ${iconValue(SVG.user, 'Membre', `${membre.prenom} ${membre.nom}`)}
-      ${iconValue(SVG.mail, 'Email', membre.email)}
-      ${iconValue(SVG.calendar, 'Date demandée', new Date(entretien.date).toLocaleString())}
-      ${iconValue(SVG.clipboard, 'Commentaire', entretien.commentaire || 'Aucun commentaire')}
-    </div>
-    <div style="text-align: center; margin: 20px 0;">
-      <a href="${FRONTEND_URL}/admin" style="${STYLES.btn} ${STYLES.btnSuccess}; margin-right: 8px;">Approuver</a>
-      <a href="${FRONTEND_URL}/admin" style="${STYLES.btn} ${STYLES.btnDanger}">Rejeter</a>
-    </div>
-  `);
-  return sendEmail(presidentEmail, subject, html);
-};
-
-// ============================================================
-// 12. ENTRETIEN APPROUVÉ
-// ============================================================
-
-const sendEntretienApprovedEmail = async (email, membre, entretien) => {
-  const subject = 'Demande d\'entretien approuvée - JCI Sidi Mansour';
-  const html = emailLayout('Entretien approuvé', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
-    <p style="${STYLES.paragraph}">Votre demande d'entretien a été approuvée par le Président.</p>
-    <div style="${STYLES.cardGreen}">
-      ${iconValue(SVG.calendar, 'Date', new Date(entretien.date).toLocaleString('fr-FR'))}
-      ${iconValue(SVG.clipboard, 'Commentaire', entretien.commentaire || 'Aucun')}
-    </div>
-    <p style="${STYLES.paragraph}">Vous serez contacté(e) pour plus de détails.</p>
-    <div style="text-align: center; margin: 20px 0;">
-      <a href="${getMemberLink(membre, 'dashboard')}" style="${STYLES.btn} ${STYLES.btnPrimary}">Accéder à mon espace</a>
-    </div>
-  `);
-  return sendEmail(email, subject, html);
-};
 
 // ============================================================
 // 13. ENTRETIEN REJETÉ
 // ============================================================
 
 const sendEntretienRejectedEmail = async (email, membre, entretien) => {
-  const subject = 'Demande d\'entretien - JCI Sidi Mansour';
-  const html = emailLayout('Entretien refusé', `
+  const subject = 'JCI Sidi Mansour - Suite de votre entretien';
+  const html = emailLayout('Entretien terminé', `
     <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
-    <p style="${STYLES.paragraph}">Votre demande d'entretien n'a pas été retenue.</p>
+    <p style="${STYLES.paragraph}">Votre entretien s'est déroulé le ${new Date(entretien.date).toLocaleDateString('fr-FR')} et
+    le Président n'a pas retenu votre candidature.</p>
+    <div style="${STYLES.cardRed || STYLES.cardYellow}">
+      ${iconValue(SVG.calendar, 'Date', new Date(entretien.date).toLocaleString('fr-FR'))}
+      ${iconValue(SVG.clipboard, 'Commentaire', entretien.commentaire || 'Aucun')}
+    </div>
     <p style="${STYLES.paragraph}">Si vous avez des questions, veuillez contacter l'association.</p>
   `);
   return sendEmail(email, subject, html);
@@ -512,115 +519,115 @@ const sendEntretienRejectedEmail = async (email, membre, entretien) => {
 // 14. NOUVELLE PUBLICATION
 // ============================================================
 
-const sendNewPublicationEmail = async (emails, publication, user) => {
-  const subject = `Nouvelle publication: ${publication.titre}`;
-  for (const email of emails) {
-    let membreLink = `${FRONTEND_URL}/publications`;
-    try {
-      const membre = await Membre.findOne({ email }).select('_id prenom nom');
-      if (membre) membreLink = getMemberLink(membre, 'dashboard');
-    } catch {}
-    const html = emailLayout('Nouvelle publication', `
-      <p style="${STYLES.paragraph}">Une nouvelle publication a été créée sur la plateforme.</p>
-      <div style="${STYLES.card}">
-        ${iconValue(SVG.megaphone, 'Titre', publication.titre)}
-        ${iconValue(SVG.clipboard, 'Légende', publication.caption || 'Aucune légende')}
-        ${iconValue(SVG.tag, 'Type', publication.type)}
-        ${iconValue(SVG.mail, 'Réseaux', (publication.socialMedia && Array.isArray(publication.socialMedia)) ? publication.socialMedia.join(', ') : 'Non spécifié')}
-        ${iconValue(SVG.user, 'Créé par', `${user.prenom} ${user.nom}`)}
-        ${iconValue(SVG.calendar, 'Date', new Date().toLocaleString())}
-      </div>
-      <div style="text-align: center; margin: 20px 0;">
-        <a href="${membreLink}" style="${STYLES.btn} ${STYLES.btnPrimary}">Voir les publications</a>
-      </div>
-    `);
-    await sendEmail(email, subject, html);
-  }
-  return true;
-};
+// const sendNewPublicationEmail = async (emails, publication, user) => {
+//   const subject = `Nouvelle publication: ${publication.titre}`;
+//   for (const email of emails) {
+//     let membreLink = `${FRONTEND_URL}/publications`;
+//     try {
+//       const membre = await Membre.findOne({ email }).select('_id prenom nom');
+//       if (membre) membreLink = getMemberLink(membre, 'dashboard');
+//     } catch {}
+//     const html = emailLayout('Nouvelle publication', `
+//       <p style="${STYLES.paragraph}">Une nouvelle publication a été créée sur la plateforme.</p>
+//       <div style="${STYLES.card}">
+//         ${iconValue(SVG.megaphone, 'Titre', publication.titre)}
+//         ${iconValue(SVG.clipboard, 'Légende', publication.caption || 'Aucune légende')}
+//         ${iconValue(SVG.tag, 'Type', publication.type)}
+//         ${iconValue(SVG.mail, 'Réseaux', (publication.socialMedia && Array.isArray(publication.socialMedia)) ? publication.socialMedia.join(', ') : 'Non spécifié')}
+//         ${iconValue(SVG.user, 'Créé par', `${user.prenom} ${user.nom}`)}
+//         ${iconValue(SVG.calendar, 'Date', new Date().toLocaleString())}
+//       </div>
+//       <div style="text-align: center; margin: 20px 0;">
+//         <a href="${membreLink}" style="${STYLES.btn} ${STYLES.btnPrimary}">Voir les publications</a>
+//       </div>
+//     `);
+//     await sendEmail(email, subject, html);
+//   }
+// //   return true;
+// };
 
 // ============================================================
 // 15. NOUVELLE ACTUALITÉ
 // ============================================================
 
-const sendNewNewsEmail = async (emails, news, user) => {
-  const subject = `Nouvelle actualité: ${news.titre}`;
-  for (const email of emails) {
-    let membreLink = `${FRONTEND_URL}/news`;
-    try {
-      const membre = await Membre.findOne({ email }).select('_id prenom nom');
-      if (membre) membreLink = getMemberLink(membre, 'dashboard');
-    } catch {}
-    const html = emailLayout('Nouvelle actualité', `
-      <p style="${STYLES.paragraph}">Une nouvelle actualité a été publiée sur la plateforme.</p>
-      <div style="${STYLES.card}">
-        ${iconValue(SVG.newspaper, 'Titre', news.titre)}
-        ${iconValue(SVG.clipboard, 'Contenu', news.contenu ? (news.contenu.substring(0, 200) + (news.contenu.length > 200 ? '...' : '')) : '' )}
-        ${iconValue(SVG.user, 'Publié par', `${user.prenom} ${user.nom}`)}
-        ${iconValue(SVG.calendar, 'Date', new Date().toLocaleString())}
-      </div>
-      <div style="text-align: center; margin: 20px 0;">
-        <a href="${membreLink}" style="${STYLES.btn} ${STYLES.btnPrimary}">Lire l'actualité</a>
-      </div>
-    `);
-    await sendEmail(email, subject, html);
-  }
-  return true;
-};
+// const sendNewNewsEmail = async (emails, news, user) => {
+//   const subject = `Nouvelle actualité: ${news.titre}`;
+//   for (const email of emails) {
+//     let membreLink = `${FRONTEND_URL}/news`;
+//     try {
+//       const membre = await Membre.findOne({ email }).select('_id prenom nom');
+//       if (membre) membreLink = getMemberLink(membre, 'dashboard');
+//     } catch {}
+//     const html = emailLayout('Nouvelle actualité', `
+//       <p style="${STYLES.paragraph}">Une nouvelle actualité a été publiée sur la plateforme.</p>
+//       <div style="${STYLES.card}">
+//         ${iconValue(SVG.newspaper, 'Titre', news.titre)}
+//         ${iconValue(SVG.clipboard, 'Contenu', news.contenu ? (news.contenu.substring(0, 200) + (news.contenu.length > 200 ? '...' : '')) : '' )}
+//         ${iconValue(SVG.user, 'Publié par', `${user.prenom} ${user.nom}`)}
+//         ${iconValue(SVG.calendar, 'Date', new Date().toLocaleString())}
+//       </div>
+//       <div style="text-align: center; margin: 20px 0;">
+//         <a href="${membreLink}" style="${STYLES.btn} ${STYLES.btnPrimary}">Lire l'actualité</a>
+//       </div>
+//     `);
+//     await sendEmail(email, subject, html);
+//   }
+// //   return true;
+// };
 
 // ============================================================
 // 16. RAPPEL DE TÂCHE MÉDIA
 // ============================================================
 
-const sendTaskReminderEmail = async (email, membre, task) => {
-  const subject = `Rappel - Tâche Média: ${task.titre}`;
-  const html = emailLayout('Rappel de tâche Média', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
-    <p style="${STYLES.paragraph}">Un rappel concernant votre tâche média ci-dessous.</p>
-    <div style="${STYLES.card}">
-      ${iconValue(SVG.clipboard, 'Titre', task.titre)}
-      ${iconValue(SVG.clipboard, 'Description', task.description || 'Aucune description')}
-      ${iconValue(SVG.calendar, 'Date', new Date(task.deadline).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }))}
-      ${iconValue(SVG.clock, 'Heure', new Date(task.deadline).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }))}
-      ${iconValue(SVG.tag, 'Priorité', task.priority || 'Moyenne')}
-      ${iconValue(SVG.pin, 'Lieu', task.location || 'Non spécifié')}
-    </div>
-    <div style="${STYLES.cardYellow}">
-      ${iconTag(SVG.warning, 'Cette tâche nécessite votre attention. Veuillez la compléter avant la date limite.')}
-    </div>
-    <div style="text-align: center; margin: 20px 0;">
-      <a href="${getMemberLink(membre, 'tasks')}" style="${STYLES.btn} ${STYLES.btnPrimary}; margin-right: 6px;">Voir la tâche</a>
-      <a href="${getMemberLink(membre, 'calendar')}" style="${STYLES.btn} ${STYLES.btnOutline}">Calendrier</a>
-    </div>
-  `);
-  return sendEmail(email, subject, html);
-};
+// const sendTaskReminderEmail = async (email, membre, task) => {
+//   const subject = `Rappel - Tâche Média: ${task.titre}`;
+//   const html = emailLayout('Rappel de tâche Média', `
+//     <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
+//     <p style="${STYLES.paragraph}">Un rappel concernant votre tâche média ci-dessous.</p>
+//     <div style="${STYLES.card}">
+//       ${iconValue(SVG.clipboard, 'Titre', task.titre)}
+//       ${iconValue(SVG.clipboard, 'Description', task.description || 'Aucune description')}
+//       ${iconValue(SVG.calendar, 'Date', new Date(task.deadline).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }))}
+//       ${iconValue(SVG.clock, 'Heure', new Date(task.deadline).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }))}
+//       ${iconValue(SVG.tag, 'Priorité', task.priority || 'Moyenne')}
+//       ${iconValue(SVG.pin, 'Lieu', task.location || 'Non spécifié')}
+//     </div>
+//     <div style="${STYLES.cardYellow}">
+//       ${iconTag(SVG.warning, 'Cette tâche nécessite votre attention. Veuillez la compléter avant la date limite.')}
+//     </div>
+//     <div style="text-align: center; margin: 20px 0;">
+//       <a href="${getMemberLink(membre, 'tasks')}" style="${STYLES.btn} ${STYLES.btnPrimary}; margin-right: 6px;">Voir la tâche</a>
+//       <a href="${getMemberLink(membre, 'calendar')}" style="${STYLES.btn} ${STYLES.btnOutline}">Calendrier</a>
+//     </div>
+//   `);
+//   return sendEmail(email, subject, html);
+// };
 
 // ============================================================
 // 17. RAPPEL AUTOMATIQUE - TÂCHES MÉDIA
 // ============================================================
 
-const sendAutoTaskReminderEmail = async (email, membre, task) => {
-  const subject = `Rappel automatique: ${task.titre} (dans 24h)`;
-  const html = emailLayout('Rappel automatique', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
-    <p style="${STYLES.paragraph}">Votre tâche média arrive à échéance.</p>
-    <div style="${STYLES.card}">
-      ${iconValue(SVG.clipboard, 'Titre', task.titre)}
-    </div>
-    <div style="${STYLES.cardRed}">
-      ${iconValue(SVG.clock, 'Échéance', new Date(task.deadline).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) + ' à ' + new Date(task.deadline).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }))}
-      ${iconTag(SVG.warning, 'Temps restant : Moins de 24h')}
-    </div>
-    <div style="${STYLES.card}">
-      ${iconValue(SVG.user, 'Assigné à', `${membre.prenom} ${membre.nom}`)}
-    </div>
-    <div style="text-align: center; margin: 20px 0;">
-      <a href="${getMemberLink(membre, 'tasks')}" style="${STYLES.btn} ${STYLES.btnPrimary}">Voir la tâche</a>
-    </div>
-  `);
-  return sendEmail(email, subject, html);
-};
+// const sendAutoTaskReminderEmail = async (email, membre, task) => {
+//   const subject = `Rappel automatique: ${task.titre} (dans 24h)`;
+//   const html = emailLayout('Rappel automatique', `
+//     <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
+//     <p style="${STYLES.paragraph}">Votre tâche média arrive à échéance.</p>
+//     <div style="${STYLES.card}">
+//       ${iconValue(SVG.clipboard, 'Titre', task.titre)}
+//     </div>
+//     <div style="${STYLES.cardRed}">
+//       ${iconValue(SVG.clock, 'Échéance', new Date(task.deadline).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) + ' à ' + new Date(task.deadline).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }))}
+//       ${iconTag(SVG.warning, 'Temps restant : Moins de 24h')}
+//     </div>
+//     <div style="${STYLES.card}">
+//       ${iconValue(SVG.user, 'Assigné à', `${membre.prenom} ${membre.nom}`)}
+//     </div>
+//     <div style="text-align: center; margin: 20px 0;">
+//       <a href="${getMemberLink(membre, 'tasks')}" style="${STYLES.btn} ${STYLES.btnPrimary}">Voir la tâche</a>
+//     </div>
+//   `);
+//   return sendEmail(email, subject, html);
+// };
 
 // ============================================================
 // 18. RÉINITIALISATION DE MOT DE PASSE
@@ -676,6 +683,7 @@ module.exports = {
   sendNewMemberNotificationToPresident,
   sendValidationAcceptedEmail,
   sendInterviewEmail,
+  sendInterviewUpdatedEmail,
   sendValidationConfirmationToPresident,
   sendRejectionEmail,
   sendValidationAccepteeEmail,
@@ -685,8 +693,6 @@ module.exports = {
   sendNewDocumentEmail,
   sendTaskAssignmentEmail,
   sendNewEventEmail,
-  sendEntretienRequestEmail,
-  sendEntretienApprovedEmail,
   sendEntretienRejectedEmail,
   sendNewPublicationEmail,
   sendNewNewsEmail,

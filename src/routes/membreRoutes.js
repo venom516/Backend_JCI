@@ -11,7 +11,9 @@ const {
   validateMembre,
   suspendreMembre,
   reactiverMembre,
+  bannirMembre,
   deleteMembre,
+  hardDeleteMembre,
   getStatsMembres,
   getPublicStats,
   getAllRoles,
@@ -20,7 +22,6 @@ const {
   getBureauMembers,
   acceptMember,
   rejectMember,
-  validerInscriptionDirect,
   getParrainList,
   createRole
 } = require('../controllers/membreController');
@@ -77,9 +78,6 @@ router.put('/:id/validate', auth, role.hasRole(['Admin', 'President']), validate
 // PUT - Accepter un membre (Président) avec date d'entretien
 router.put('/:id/accept', auth, role.isPresident, validateObjectId, acceptMember);
 
-// PUT - Valider une inscription directement (Président) - sans entretien
-router.put('/:id/valider', auth, role.isPresident, validateObjectId, validerInscriptionDirect);
-
 // PUT - Rejeter un membre (Président)
 router.put('/:id/reject', auth, role.isPresident, validateObjectId, rejectMember);
 
@@ -89,7 +87,13 @@ router.put('/:id/suspendre', auth, role.isUserManager, validateObjectId, suspend
 // PUT - Réactiver un membre
 router.put('/:id/reactiver', auth, role.isUserManager, validateObjectId, reactiverMembre);
 
+// PUT - Bannir un membre (Président seulement)
+router.put('/:id/bannir', auth, role.isPresident, validateObjectId, bannirMembre);
+
 // DELETE - Supprimer un membre
 router.delete('/:id', auth, role.isUserManager, validateObjectId, deleteMembre);
+
+// DELETE - Suppression définitive du membre et de ses entretiens (Président seulement)
+router.delete('/:id/permanent', auth, role.isPresident, validateObjectId, hardDeleteMembre);
 
 module.exports = router;

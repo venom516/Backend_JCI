@@ -14,15 +14,20 @@ const membreSchema = new mongoose.Schema({
   },
   status: { 
     type: String, 
-    enum: ['actif', 'inactif', 'suspendu', 'en-attente', 'non-validé', 'refusé'], 
-    default: 'en-attente' 
+    enum: ['non-inscrit', 'en-attente', 'actif', 'suspendu', 'banni', 'refusé', 'inactif', 'non-validé'], 
+    default: 'non-inscrit' 
   },
   isEmailVerified: { type: Boolean, default: false },
   codeValidation: { type: String },
   codeValidationExpire: { type: Date },
   telephone: { type: String, trim: true },
   adresse: { type: String, trim: true },
+  sexe: { type: String, trim: true },
   situationProfessionnelle: { type: String, trim: true },
+  // Ancien champ de saisie de la profession, toujours peuplé en base.
+  // Déclaré pour qu'il soit préservé lors des mises à jour ; les statistiques
+  // le privilégient à situationProfessionnelle.
+  travailOuEtude: { type: String, trim: true },
   dateNaissance: { type: Date },
   urlFacebook: { type: String },
   urlLinkedIn: { type: String },
@@ -39,10 +44,15 @@ const membreSchema = new mongoose.Schema({
   parrainId: { type: mongoose.Schema.Types.ObjectId, ref: 'Membre' },
   parrain: { type: String, trim: true },
   datePriseFonction: { type: Date },
+  mandatFin: { type: Date },
   mandatAnnee: { type: Number },
+  // Second rôle : réservé au seul rôle "PP" (ancien président), qui peut
+  // retrouver une fonction active. Vide pour tous les autres rôles.
+  roleSecondaire: { type: String, trim: true },
   resetPasswordToken: { type: String },
   resetPasswordExpires: { type: Date },
   lastLogin: { type: Date },
+  archiver: { type: Boolean, default: false },
 }, { timestamps: true });
 
 // Hash password avant sauvegarde

@@ -1,6 +1,8 @@
 const News = require('../models/News');
 const Membre = require('../models/Membre');
 const { sendNewNewsEmail } = require('../config/email');
+const { isValidTransition } = require('../services/stateMachine');
+const { normalizeImageUrl } = require('../services/imageStore');
 
 // ============================================================
 // 1. CRÉER UNE ACTUALITÉ
@@ -19,7 +21,7 @@ exports.createNews = async (req, res) => {
     const news = await News.create({
       titre,
       contenu,
-      image: image || 'default-news.jpg',
+      image: req.file ? req.file.path : await normalizeImageUrl(image),
       tags: tags || [],
       createdBy: req.userId,
       status: 'brouillon'
@@ -168,7 +170,7 @@ exports.updateNews = async (req, res) => {
       });
     }
 
-    if (news.createdBy.toString() !== req.userId && req.userRole !== 'President') {
+    if (news.createdBy.toString() !== String(req.userId) && req.userRole !== 'President') {
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé'
@@ -182,9 +184,21 @@ exports.updateNews = async (req, res) => {
       });
     }
 
+    const updateData = { ...req.body };
+    if (req.file) {
+      updateData.image = req.file.path;
+    } else if (
+      req.body.image &&
+      !/^default-(news|event)\.jpg$/i.test(String(req.body.image).trim())
+    ) {
+      updateData.image = await normalizeImageUrl(req.body.image);
+    } else {
+      delete updateData.image;
+    }
+
     const updated = await News.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updateData,
       { new: true, runValidators: true }
     );
 
@@ -215,7 +229,7 @@ exports.deleteNews = async (req, res) => {
       });
     }
 
-    if (news.createdBy.toString() !== req.userId && req.userRole !== 'President') {
+    if (news.createdBy.toString() !== String(req.userId) && req.userRole !== 'President') {
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé'
@@ -250,11 +264,28 @@ exports.publishNews = async (req, res) => {
       });
     }
 
-    if (news.createdBy.toString() !== req.userId && req.userRole !== 'President') {
+    // Acceptation : le President ou un Conseiller Media ( meme si l'actualite
+    // n'a pas ete creee par lui ).
+    const peutAccepter = req.userRole === 'President' || req.userRole === 'ConseillerMedia';
+    if (!peutAccepter && news.createdBy.toString() !== String(req.userId)) {
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé'
       });
+    }
+
+    // Idempotence : si déjà publiée, on ne relance pas une transition invalide
+    if (news.status === 'publiée') {
+      return res.json({
+        success: true,
+        message: 'Actualité déjà publiée',
+        data: news
+      });
+    }
+
+    const validation = isValidTransition('news', news.status, 'publiée');
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: validation.message });
     }
 
     news.status = 'publiée';
@@ -262,16 +293,16 @@ exports.publishNews = async (req, res) => {
     await news.save();
 
     // Notifier tous les membres actifs de la nouvelle actualité
-    try {
-      const membres = await Membre.find({ status: 'actif' });
-      const emails = membres.map(m => m.email);
-      if (emails.length > 0) {
-        await sendNewNewsEmail(emails, news, req.user);
-        console.log(`📧 Notification nouvelle actualité envoyée à ${emails.length} membres`);
-      }
-    } catch (emailError) {
-      console.error('⚠️ Erreur envoi notification actualité:', emailError.message);
-    }
+    // try {
+    //   const membres = await Membre.find({ status: 'actif' });
+    //   const emails = membres.map(m => m.email);
+    //   if (emails.length > 0) {
+    //     await sendNewNewsEmail(emails, news, req.user);
+    //     console.log(`📧 Notification nouvelle actualité envoyée à ${emails.length} membres`);
+    //   }
+    // } catch (emailError) {
+    //   console.error('⚠️ Erreur envoi notification actualité:', emailError.message);
+    // }
 
     res.json({
       success: true,
@@ -300,11 +331,16 @@ exports.archiveNews = async (req, res) => {
       });
     }
 
-    if (news.createdBy.toString() !== req.userId && req.userRole !== 'President') {
+    if (news.createdBy.toString() !== String(req.userId) && req.userRole !== 'President') {
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé'
       });
+    }
+
+    const validation = isValidTransition('news', news.status, 'archivée');
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: validation.message });
     }
 
     news.status = 'archivée';
@@ -325,7 +361,7 @@ exports.archiveNews = async (req, res) => {
 };
 
 // ============================================================
-// 9. LIKE NEWS
+// 11. LIKE NEWS
 // ============================================================
 exports.likeNews = async (req, res) => {
   try {
