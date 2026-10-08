@@ -7,8 +7,7 @@ const crypto = require('crypto');
 const { 
   sendRegistrationEmail,
   sendNewMemberNotificationToPresident,
-  sendForgotPasswordCode,
-  sendInterviewEmail
+  sendForgotPasswordCode
 } = require('../config/email');
 
 // ============================================================
@@ -34,7 +33,7 @@ exports.register = async (req, res) => {
   try {
     console.log('📝 Tentative d\'inscription:', req.body.email);
 
-    const { nom, prenom, email, password, telephone, adresse, situationProfessionnelle, dateNaissance, urlFacebook, urlLinkedIn, langues, competences, pointsForts, societe, hobbies, association, connaissanceZone, connaissanceJCI, pointsDeveloppement, parrainId, parrain } = req.body;
+    const { nom, prenom, email, password, telephone, adresse, sexe, situationProfessionnelle, dateNaissance, urlFacebook, urlLinkedIn, langues, competences, pointsForts, societe, hobbies, association, connaissanceZone, connaissanceJCI, pointsDeveloppement, parrainId, parrain } = req.body;
 
     // ✅ Validation
     if (!nom || !prenom || !email || !password) {
@@ -96,8 +95,11 @@ exports.register = async (req, res) => {
     }
 
     // ✅ Vérifier si l'email existe déjà
+    // Un compte archivé (supprimé) ou refusé peut se réinscrire normalement :
+    // son compte est réactivé et repart en statut "en cours" comme un nouvel inscrit
     const membreExistant = await Membre.findOne({ email: email.toLowerCase() });
-    if (membreExistant) {
+    const compteReinscriptible = membreExistant && (membreExistant.archiver || membreExistant.status === 'refusé');
+    if (membreExistant && !compteReinscriptible) {
       return res.status(400).json({
         success: false,
         message: 'Cet email est déjà utilisé'
@@ -122,6 +124,7 @@ exports.register = async (req, res) => {
       password,
       telephone: telephone || '',
       adresse: adresse || '',
+      sexe: sexe || '',
       situationProfessionnelle: situationProfessionnelle || 'Autre',
       dateNaissance: dateNaissance || undefined,
       urlFacebook: urlFacebook || '',
@@ -141,9 +144,28 @@ exports.register = async (req, res) => {
       isEmailVerified: false,
       role
     };
-    const membre = await Membre.create(membreData);
 
-    console.log(`✅ Membre créé: ${membre.email}`);
+    let reinscription = false;
+    let membre;
+    if (membreExistant) {
+      // Réinscription d'un compte archivé ou refusé : on réinitialise son compte
+      // comme une nouvelle inscription (statut "en cours", compte déverrouillé)
+      reinscription = true;
+      membre = membreExistant;
+      Object.assign(membre, membreData);
+      membre.archiver = false;
+      membre.isEmailVerified = false;
+      membre.status = 'en-attente';
+      membre.codeValidation = undefined;
+      membre.codeValidationExpire = undefined;
+      membre.resetPasswordToken = undefined;
+      membre.resetPasswordExpires = undefined;
+      await membre.save();
+      console.log(`♻️ Compte réinscrit: ${membre.email}`);
+    } else {
+      membre = await Membre.create(membreData);
+      console.log(`✅ Membre créé: ${membre.email}`);
+    }
 
     // ✅ Envoyer email au membre (avec lien de vérification)
     try {
@@ -155,7 +177,9 @@ exports.register = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: '✅ Inscription réussie ! Veuillez vérifier votre email.',
+      message: reinscription
+        ? '✅ Réinscription réussie ! Votre compte est en cours de validation. Veuillez vérifier votre email.'
+        : '✅ Inscription réussie ! Veuillez vérifier votre email.',
       data: {
         id: membre._id,
         nom: membre.nom,
@@ -347,7 +371,21 @@ exports.login = async (req, res) => {
       });
     }
 
-    if (membre.status === 'non-validé' || membre.status === 'en-attente' || membre.status === 'refusé') {
+    if (membre.status === 'banni') {
+      return res.status(403).json({
+        success: false,
+        message: 'Votre compte a été banni'
+      });
+    }
+
+    if (membre.archiver) {
+      return res.status(403).json({
+        success: false,
+        message: 'Votre compte a été archivé'
+      });
+    }
+
+    if (membre.status === 'non-inscrit' || membre.status === 'non-validé' || membre.status === 'en-attente' || membre.status === 'refusé') {
       return res.status(403).json({
         success: false,
         message: 'Votre compte est en attente de validation'
@@ -397,6 +435,30 @@ exports.login = async (req, res) => {
       }
     }
 
+    // Vérifier mandat VPFD/VPPRE/Tresorie
+    const MANDAT_ROLES = ['VPFD', 'VPPRE', 'Tresorie'];
+    let mandatExpired = false;
+    if (MANDAT_ROLES.includes(membre.role) && membre.mandatFin) {
+      if (today > new Date(membre.mandatFin)) {
+        mandatExpired = true;
+        // Vérifier s'il y a un autre membre avec ce même rôle
+        const autrePorteur = await Membre.findOne({
+          role: membre.role,
+          _id: { $ne: membre._id },
+          status: 'actif',
+          mandatFin: { $gt: today }
+        });
+        if (autrePorteur) {
+          // Un successeur a déjà pris le rôle → rétrograder en Membre
+          membre.role = 'Membre';
+          membre.datePriseFonction = undefined;
+          membre.mandatFin = undefined;
+          membre.mandatAnnee = undefined;
+        }
+        // Sinon, le mandat est expiré mais pas de successeur → laisser le rôle actif
+      }
+    }
+
     // ✅ Vérification Sénateur automatique
     if (membre.dateNaissance) {
       const birthDate = new Date(membre.dateNaissance);
@@ -437,6 +499,15 @@ exports.login = async (req, res) => {
       case 'PP':
         roleMessage = '🌟 Bienvenue Past President !';
         break;
+      case 'VPFD':
+        roleMessage = '📊 Bienvenue VPFD !';
+        break;
+      case 'VPPRE':
+        roleMessage = '📋 Bienvenue VPPRE !';
+        break;
+      case 'Tresorie':
+        roleMessage = '💰 Bienvenue Trésorier !';
+        break;
       default:
         roleMessage = '👤 Bienvenue Membre !';
     }
@@ -452,7 +523,8 @@ exports.login = async (req, res) => {
           prenom: membre.prenom,
           email: membre.email,
           role: membre.role,
-          status: membre.status
+          status: membre.status,
+          mandatExpired
         }
       }
     });

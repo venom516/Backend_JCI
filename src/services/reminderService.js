@@ -30,7 +30,7 @@ const sendAutoReminders = async () => {
 
     let sentCount = 0;
     for (const task of tasks) {
-      if (task.membre && task.membre.email) {
+      if (task.membre && task.membre.email && !task.membre.archiver) {
         await sendAutoTaskReminderEmail(task.membre.email, task.membre, task);
         task.notificationSent = true;
         task.notificationDate = new Date();

@@ -21,11 +21,12 @@ const schemas = {
       }
     },
     password: { required: true, type: 'string', min: 6 },
-    telephone: { 
-      required: false, 
-      type: 'string', 
-      min: 8, 
-      max: 8,
+    telephone: {
+      required: false,
+      type: 'string',
+      // Pas de min/max sur la longueur brute : le validateur ci-dessous nettoie
+      // espaces, tirets et indicatif, puis exige 8 chiffres. Imposer "8 caractères"
+      // rejetait à tort "51-60-15-43" ou "+216 51 60 15 43".
       custom: (value) => {
         if (!value) return null;
         const cleaned = value.replace(/[\s\-\(\)\.\+]/g, '');
@@ -61,6 +62,8 @@ const schemas = {
           return 'Date invalide (ex: 31/02/2000 n\'existe pas)';
         }
         if (date > new Date()) return 'La date de naissance ne peut pas être dans le futur';
+        const age = Math.floor((new Date() - date) / (365.25 * 24 * 60 * 60 * 1000));
+        if (age < 10) return 'Vous devez avoir au moins 10 ans';
         return null;
       }
     },
@@ -103,9 +106,9 @@ const schemas = {
     },
     telephone: { 
       required: false, 
-      type: 'string', 
-      min: 8, 
-      max: 8,
+      type: 'string',
+      // Idem : la longueur brute n'est pas pertinente, seul compte le nombre
+      // de chiffres une fois les séparateurs retirés (voir validate ci-dessus).
       custom: (value) => {
         if (!value) return null;
         const cleaned = value.replace(/[\s\-\(\)\.\+]/g, '');
@@ -142,6 +145,8 @@ const schemas = {
           return 'Date invalide (ex: 31/02/2000 n\'existe pas)';
         }
         if (date > new Date()) return 'La date de naissance ne peut pas être dans le futur';
+        const age = Math.floor((new Date() - date) / (365.25 * 24 * 60 * 60 * 1000));
+        if (age < 10) return 'Vous devez avoir au moins 10 ans';
         return null;
       }
     },
@@ -170,15 +175,27 @@ const schemas = {
       }
     },
     role: { 
+      required: false,
+      type: 'string',
+      min: 2,
+      max: 50 
+    },
+    roleSecondaire: { 
       required: false, 
       type: 'string', 
-      min: 2, 
-      max: 50 
+      max: 50,
+      custom: (value) => {
+        if (!value) return null;
+        if (['PP', 'President'].includes(value)) {
+          return 'Le second rôle ne peut pas être PP ou Président';
+        }
+        return null;
+      }
     },
     status: { 
       required: false, 
       type: 'enum', 
-      values: ['non-validé', 'en-attente', 'actif', 'suspendu', 'banni'] 
+      values: ['non-inscrit', 'non-validé', 'en-attente', 'actif', 'suspendu', 'banni', 'refusé', 'inactif'] 
     }
   },
 
@@ -230,7 +247,7 @@ const schemas = {
     status: { 
       required: false, 
       type: 'enum', 
-      values: ['brouillon', 'en-attente', 'publiée', 'archivée', 'supprimée'] 
+      values: ['brouillon', 'publiée', 'archivée'] 
     }
   },
 
@@ -304,12 +321,14 @@ const schemas = {
   // ==========================================================
   entretien: {
     date: { required: true, type: 'date' },
+    dateFin: { required: true, type: 'date' },
     commentaire: { required: false, type: 'string', max: 500 },
     lieu: { required: false, type: 'string', max: 200 }
   },
 
   entretienUpdate: {
     date: { required: false, type: 'date' },
+    dateFin: { required: false, type: 'date' },
     commentaire: { required: false, type: 'string', max: 500 },
     lieu: { required: false, type: 'string', max: 200 },
     note: { required: false, type: 'number', min: 0, max: 20 },
@@ -368,6 +387,7 @@ const validateSchema = (data, schema) => {
 
   for (const [field, rules] of Object.entries(schema)) {
     const value = data[field];
+    let coerced = value;
 
     // Vérifier les champs requis
     if (rules.required) {
@@ -416,13 +436,19 @@ const validateSchema = (data, schema) => {
         break;
 
       case 'number':
-        if (typeof value !== 'number' || isNaN(value)) {
+        // Les champs numériques reçus en multipart/form-data arrivent en
+        // chaîne ("20"). On les convertit avant de valider, sinon toute
+        // création avec une image jointe échoue.
+        if (typeof value === 'string' && value.trim() !== '' && !isNaN(Number(value))) {
+          coerced = Number(value);
+        }
+        if (typeof coerced !== 'number' || isNaN(coerced)) {
           errors.push(`Le champ "${field}" doit être un nombre`);
         } else {
-          if (rules.min !== undefined && value < rules.min) {
+          if (rules.min !== undefined && coerced < rules.min) {
             errors.push(`Le champ "${field}" doit être supérieur ou égal à ${rules.min}`);
           }
-          if (rules.max !== undefined && value > rules.max) {
+          if (rules.max !== undefined && coerced > rules.max) {
             errors.push(`Le champ "${field}" doit être inférieur ou égal à ${rules.max}`);
           }
         }
@@ -456,6 +482,11 @@ const validateSchema = (data, schema) => {
       if (customError) {
         errors.push(customError);
       }
+    }
+
+    // Remonter la valeur coercée (champs numériques reçus en chaîne)
+    if (rules.type === 'number' && data[field] !== coerced) {
+      data[field] = coerced;
     }
   }
 

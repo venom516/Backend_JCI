@@ -9,6 +9,11 @@ const rateLimit = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
 require('dotenv').config();
 
+// Doit precedre tout require() de src/config/email.js (fait via les
+// controleurs) : email.js exporte 7 fonctions qui y sont commentees, ce qui
+// provoque un ReferenceError au chargement. Le shim les definit en no-op.
+require('./src/config/emailNotifsShim');
+
 // Évite le crash sur erreurs réseau / MongoDB
 process.on('uncaughtException', (err) => {
   console.error('⚠️ uncaughtException (ignorée):', err.message);
@@ -18,7 +23,7 @@ process.on('unhandledRejection', (reason) => {
 });
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // Confiance proxy (nécessaire pour rate limiting derrière un proxy)
 app.set('trust proxy', 1);
@@ -156,10 +161,10 @@ const entretienRoutes = require('./src/routes/entretienRoutes');
 const publicationRoutes = require('./src/routes/publicationRoutes');
 const dashboardRoutes = require('./src/routes/dashboardRoutes');
 const contactRoutes = require('./src/routes/contactRoutes');
-const formationRoutes = require('./src/routes/formationRoutes');
 const socialRoutes = require('./src/routes/socialRoutes');
 const siteConfigRoutes = require('./src/routes/siteConfigRoutes');
 const calendarRoutes = require('./src/routes/calendarRoutes');
+const imageRoutes = require('./src/routes/imageRoutes');
 
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/membres', membreRoutes);
@@ -171,10 +176,10 @@ app.use('/api/entretiens', entretienRoutes);
 app.use('/api/publications', publicationRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/contact', contactLimiter, contactRoutes);
-app.use('/api/formations', formationRoutes);
 app.use('/api/social', socialRoutes);
 app.use('/api/site-config', siteConfigRoutes);
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/images', imageRoutes);
 
 // Route santé (accessible même si MongoDB est down)
 app.get('/api/health', async (req, res) => {
@@ -208,6 +213,36 @@ app.get('/', (req, res) => {
 // ──────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error('❌ Erreur non gérée:', err);
+
+  if (err && err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({
+      success: false,
+      message: 'Fichier trop volumineux. La taille maximale est de 10 Mo.'
+    });
+  }
+
+  if (err && err.code && String(err.code).startsWith('LIMIT_')) {
+    return res.status(400).json({
+      success: false,
+      message: 'Upload invalide : aucun fichier reçu ou champ de fichier incorrect.'
+    });
+  }
+
+  if (err && typeof err.message === 'string' && err.message.startsWith('Type de fichier non supporté')) {
+    return res.status(400).json({
+      success: false,
+      message: err.message
+    });
+  }
+
+  const rejetteParCloudinary = /^(Invalid PDF file|An unknown file format not allowed|File size too large|File type .* not supported)/i;
+  if (err && typeof err.message === 'string' && rejetteParCloudinary.test(err.message.trim())) {
+    return res.status(400).json({
+      success: false,
+      message: `Fichier refusé : ${err.message.trim()}. Essaie un autre format (PDF, JPG, PNG, DOCX, XLSX).`
+    });
+  }
+
   const status = err.status || 500;
   res.status(status).json({
     success: false,

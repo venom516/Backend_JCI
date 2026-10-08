@@ -10,6 +10,10 @@ const entretienSchema = new mongoose.Schema({
     type: Date,
     required: [true, 'La date est obligatoire']
   },
+  dateFin: {
+    type: Date,
+    required: [true, 'La date de fin est obligatoire']
+  },
   lien: {
     type: String,
     trim: true
@@ -24,8 +28,8 @@ const entretienSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['demandé', 'en-attente', 'approuvé', 'réalisé', 'annulé'],
-    default: 'demandé'
+    enum: ['planifié', 'en-cours', 'terminé', 'accepté', 'rejeté'],
+    default: 'planifié'
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,

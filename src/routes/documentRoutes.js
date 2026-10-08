@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const role = require('../middleware/role');
-const upload = require('../middleware/upload');
+const { uploadDocument: uploadDoc } = require('../middleware/upload');
 const { validateObjectId } = require('../middleware/validation');
 const {
   uploadDocument,
@@ -12,6 +12,8 @@ const {
   deleteDocument,
   approveDocument,
   archiveDocument,
+  soumettreDocument,
+  rejeterDocument,
   downloadDocument
 } = require('../controllers/documentController');
 
@@ -37,7 +39,7 @@ router.post(
   '/',
   auth,
   role.isSecretaireGeneral,
-  upload.single('fichier'),
+  uploadDoc.single('fichier'),
   uploadDocument
 );
 
@@ -47,7 +49,7 @@ router.put(
   auth,
   role.isSecretaireGeneral,
   validateObjectId,
-  upload.single('fichier'),
+  uploadDoc.single('fichier'),
   updateDocument
 );
 
@@ -76,6 +78,24 @@ router.put(
   role.isSecretaireGeneral,
   validateObjectId,
   archiveDocument
+);
+
+// PUT - Soumettre un document (brouillon → en-attente)
+router.put(
+  '/:id/soumettre',
+  auth,
+  role.isSecretaireGeneral,
+  validateObjectId,
+  soumettreDocument
+);
+
+// PUT - Rejeter un document (en-attente → brouillon)
+router.put(
+  '/:id/rejeter',
+  auth,
+  role.isSecretaireGeneral,
+  validateObjectId,
+  rejeterDocument
 );
 
 module.exports = router;

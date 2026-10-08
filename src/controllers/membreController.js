@@ -6,14 +6,14 @@ const Entretien = require('../models/Entretien');
 const Task = require('../models/Task');
 const Event = require('../models/Event');
 const News = require('../models/News');
+const { isValidTransition } = require('../services/stateMachine');
 const { 
   sendEmail,
   sendEmailChangeVerification,
-  sendValidationAcceptedEmail,
   sendValidationConfirmationToPresident,
   sendInterviewEmail,
-  sendRejectionEmail,
   sendValidationAccepteeEmail,
+  sendRejectionEmail,
   sendSuspensionEmail,
   sendReactivationEmail
 } = require('../config/email');
@@ -31,15 +31,32 @@ const UNIQUE_ROLES = [
   'Directeur Exécutif'
 ];
 
+// Rôles à durée limitée (mandat d'1 an, renouvelable 1x)
+const MANDAT_ROLES = ['VPFD', 'VPPRE', 'Tresorie'];
+const MANDAT_DUREE_MS = 365 * 24 * 60 * 60 * 1000; // 1 an en ms
+
 // ============================================================
 // 1. GET MEMBRES - Liste des membres
 // ============================================================
 exports.getMembres = async (req, res) => {
   try {
-    const { status, role, search, page = 1, limit = 10000 } = req.query;
+    const { status, role, search, page = 1, limit = 10000, archived = 'false', refused } = req.query;
     const filter = {};
-    
-    if (status) {
+
+    // Un compte archivé (supprimé) est différent d'un compte refusé :
+    // les refusés ont leur propre vue, les deux ensembles sont disjoints
+    const vueRefuses = refused === 'true' || refused === true;
+    if (vueRefuses) {
+      filter.status = 'refusé';
+    } else if (archived === 'true' || archived === true) {
+      filter.archiver = true;
+      filter.status = { $ne: 'refusé' };
+    } else {
+      filter.archiver = { $ne: true };
+      filter.status = { $ne: 'refusé' };
+    }
+
+    if (status && !vueRefuses) {
       const statuses = status.split(',').map(s => s.trim());
       filter.status = statuses.length > 1 ? { $in: statuses } : statuses[0];
     }
@@ -134,6 +151,13 @@ exports.updateMembre = async (req, res) => {
       });
     }
 
+    if (membre.archiver) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ce compte est archivé et ne peut pas être modifié'
+      });
+    }
+
     // Vérifier si l'email change
     const emailChanged = req.body.email && req.body.email !== membre.email;
     const oldEmail = membre.email;
@@ -150,9 +174,24 @@ exports.updateMembre = async (req, res) => {
       }
     }
 
-    // Vérifier l'unicité du téléphone si modifié
+    // Vérifier l'unicité du téléphone si modifié.
+    // - on compare sur les chiffres seuls, sinon "51-60-15-43" passerait à côté
+    //   de "51601543" alors que c'est le même numéro ;
+    // - on ignore les comptes supprimés (archiver), qui ne doivent pas continuer
+    //   à réserver un numéro ;
+    // - on regarde aussi l'ancien champ "tel", encore rempli sur la plupart des
+    //   membres, faute de quoi un doublon pourrait se créer.
     if (req.body.telephone) {
-      const telExistant = await Membre.findOne({ telephone: req.body.telephone, _id: { $ne: req.params.id } });
+      const telSaisi = String(req.body.telephone);
+      const telNettoye = telSaisi.replace(/[\s\-\(\)\.\+]/g, '');
+      const telExistant = await Membre.findOne({
+        _id: { $ne: req.params.id },
+        archiver: { $ne: true },
+        $or: [
+          { telephone: { $in: [telSaisi, telNettoye] } },
+          { tel: { $in: [telSaisi, telNettoye] } }
+        ]
+      });
       if (telExistant) {
         return res.status(400).json({
           success: false,
@@ -169,6 +208,52 @@ exports.updateMembre = async (req, res) => {
       });
     }
 
+    // Second rôle : autorisé uniquement pour un ancien président (PP).
+    // Le rôle principal reste "PP" ; roleSecondaire porte la fonction active.
+    if (req.body.roleSecondaire !== undefined) {
+      const second = String(req.body.roleSecondaire || '').trim();
+      // Une valeur VIDE n'est pas une tentative de cumul : c'est l'absence de
+      // second rôle (le formulaire envoie toujours le champ, meme vide). Le
+      // controle "PP uniquement" ne concerne donc que la presence d'un second
+      // role reel, sinon modifier le nom d'un membre non-PP echouait en 400.
+      if (second) {
+        if (membre.role !== 'PP') {
+          return res.status(400).json({
+            success: false,
+            message: 'Seul un ancien président (PP) peut cumuler un second rôle'
+          });
+        }
+        if (second === 'PP' || second === 'President') {
+          return res.status(400).json({
+            success: false,
+            message: 'Le second rôle ne peut pas être PP ou Président'
+          });
+        }
+        // Un poste unique ne peut pas être occupé deux fois : on compte en
+        // ignorant ce membre et les comptes supprimés.
+        if (UNIQUE_ROLES.includes(second)) {
+          const dejaPris = await Membre.findOne({
+            role: second,
+            _id: { $ne: req.params.id },
+            archiver: { $ne: true },
+            status: { $ne: 'refusé' }
+          });
+          if (dejaPris) {
+            return res.status(400).json({
+              success: false,
+              message: `Le poste ${second} est déjà occupé par ${dejaPris.prenom} ${dejaPris.nom}`
+            });
+          }
+        }
+        req.body.roleSecondaire = second;
+      } else if (membre.role === 'PP') {
+        // Seul un PP peut avoir un second rôle, donc seul un PP peut l'effacer.
+        req.body.roleSecondaire = '';
+      }
+      // Pour un non-PP la valeur vide est ignoree : il n'a pas de second rôle
+      // et n'en aura pas.
+    }
+
     // Rotation automatique des rôles Président
     if (req.body.role === 'President' && req.body.role !== membre.role) {
       const oldPresident = await Membre.findOne({ role: 'President', _id: { $ne: req.params.id }, status: { $ne: 'refusé' } });
@@ -177,6 +262,9 @@ exports.updateMembre = async (req, res) => {
         oldPPI.role = 'PP';
         oldPPI.datePriseFonction = new Date();
         oldPPI.mandatAnnee = new Date().getFullYear() - 2;
+        // Le membre redevenu PPI ne pouvait pas cumuler : son éventuel second
+        // rôle n'a de sens qu'une fois devenu PP.
+        oldPPI.roleSecondaire = undefined;
         await oldPPI.save();
       }
       if (oldPresident) {
@@ -194,6 +282,40 @@ exports.updateMembre = async (req, res) => {
           success: false,
           message: 'Ce rôle est déjà attribué à un autre membre. Veuillez d\'abord le retirer avant de l\'attribuer à une nouvelle personne.'
         });
+      }
+    }
+
+    // Un membre qui n'est plus "PP" ne peut plus cumuler : on retire le second
+    // rôle dès qu'il prend une autre fonction (Sénateur, Membre, Tresorie...).
+    if (membre.role === 'PP' && req.body.role && req.body.role !== 'PP') {
+      req.body.roleSecondaire = '';
+    }
+
+    // Gestion du mandat pour VPFD, VPPRE, Tresorie
+    if (req.body.role && MANDAT_ROLES.includes(req.body.role)) {
+      if (req.body.role !== membre.role) {
+        // Nouvelle assignation : définir mandat d'1 an
+        req.body.datePriseFonction = new Date();
+        req.body.mandatFin = new Date(Date.now() + MANDAT_DUREE_MS);
+        req.body.mandatAnnee = new Date().getFullYear();
+      } else if (membre.mandatFin && new Date() > new Date(membre.mandatFin)) {
+        // Renouvellement : vérifier s'il existe un successeur
+        const memeRole = await Membre.countDocuments({
+          role: req.body.role,
+          _id: { $ne: req.params.id },
+          status: { $ne: 'refusé' }
+        });
+        if (memeRole === 0) {
+          // Pas de successeur → renouvellement possible
+          req.body.datePriseFonction = new Date();
+          req.body.mandatFin = new Date(Date.now() + MANDAT_DUREE_MS);
+          req.body.mandatAnnee = new Date().getFullYear();
+        } else {
+          return res.status(400).json({
+            success: false,
+            message: `Le mandat de ${req.body.role} est expiré. Un autre membre occupe déjà ce poste.`
+          });
+        }
       }
     }
 
@@ -339,37 +461,42 @@ exports.validateMembre = async (req, res) => {
       });
     }
 
-    if (membre.status !== 'en-attente' && membre.status !== 'non-validé') {
+    if (membre.archiver) {
       return res.status(400).json({
         success: false,
-        message: 'Ce membre n\'est pas en attente de validation'
+        message: 'Ce compte est archivé et ne peut être ni modifié ni supprimé'
       });
     }
 
     // ============================================================
-    // CAS 1 : VALIDATION
+    // CAS 1 : VALIDATION (entretien obligatoire avant activation)
     // ============================================================
     if (action === 'validate') {
-      
-      // Mettre à jour le statut
-      membre.status = 'actif';
-      await membre.save();
+      const validation = isValidTransition('membre', membre.status, 'actif');
+      if (!validation.valid) {
+        return res.status(400).json({ success: false, message: 'Ce membre ne peut pas être validé' });
+      }
 
-      // Créer un entretien automatique
-      const entretienDate = new Date();
-      entretienDate.setDate(entretienDate.getDate() + 7);
+      // Créer un entretien automatique - le membre reste 'en-attente'
+      // jusqu'à l'acceptation de l'entretien par le Président
+      const debut = new Date();
+      debut.setDate(debut.getDate() + 7);
+      debut.setHours(9, 0, 0, 0);
+      const fin = new Date(debut);
+      fin.setHours(17, 0, 0, 0);
 
       const entretien = await Entretien.create({
         membre: membre._id,
-        date: entretienDate,
+        date: debut,
+        dateFin: fin,
         commentaire: 'Entretien de bienvenue suite à la validation du compte',
         createdBy: req.userId,
-        status: 'demandé'
+        status: 'planifié'
       });
 
       // Envoyer email au membre
-      await sendValidationAcceptedEmail(membre, entretien);
-      console.log(`📧 Email validation envoyé à ${membre.email}`);
+      await sendInterviewEmail(membre, entretien);
+      console.log(`📧 Email entretien envoyé à ${membre.email}`);
 
       // Envoyer email au président
       const president = await Membre.findOne({ role: 'President' });
@@ -380,7 +507,7 @@ exports.validateMembre = async (req, res) => {
 
       return res.json({
         success: true,
-        message: '✅ Inscription validée avec succès. Un entretien a été créé.',
+        message: '✅ Entretien planifié. Le membre sera activé après acceptation de l\'entretien.',
         data: { membre, entretien }
       });
 
@@ -388,16 +515,29 @@ exports.validateMembre = async (req, res) => {
     // CAS 2 : REJET
     // ============================================================
     } else {
+      const validation = isValidTransition('membre', membre.status, 'refusé');
+      if (!validation.valid) {
+        return res.status(400).json({ success: false, message: 'Ce membre ne peut pas être rejeté' });
+      }
+
+      const { email, nom, prenom } = membre;
       membre.status = 'refusé';
       await membre.save();
 
-      await sendRejectionEmail(membre.email, membre.nom, membre.prenom);
-      console.log(`📧 Email rejet envoyé à ${membre.email}`);
+      // Un compte refusé reste tracé dans la KPI "Refusés" :
+      // il n'est pas archivé (donc pas compté comme "supprimé")
+      // et ses entretiens en cours passent à "rejeté"
+      await Entretien.updateMany(
+        { membre: membre._id, status: { $in: ['planifié', 'en-cours', 'terminé'] } },
+        { $set: { status: 'rejeté' } }
+      );
+
+      await sendRejectionEmail(email, nom, prenom);
+      console.log(`📧 Email rejet envoyé à ${email}`);
 
       return res.json({
         success: true,
-        message: '❌ Inscription rejetée avec succès',
-        data: membre
+        message: '❌ Inscription refusée. Le compte a été archivé et l\'entretien annulé.',
       });
     }
 
@@ -431,11 +571,16 @@ exports.suspendreMembre = async (req, res) => {
       });
     }
 
-    if (membre.status !== 'actif' && membre.status !== 'inactif') {
+    if (membre.archiver) {
       return res.status(400).json({
         success: false,
-        message: 'Ce membre ne peut pas être suspendu'
+        message: 'Ce compte est archivé et ne peut être ni modifié ni supprimé'
       });
+    }
+
+    const validation = isValidTransition('membre', membre.status, 'suspendu');
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: 'Ce membre ne peut pas être suspendu' });
     }
 
     membre.status = 'suspendu';
@@ -482,11 +627,16 @@ exports.reactiverMembre = async (req, res) => {
       });
     }
 
-    if (membre.status !== 'suspendu' && membre.status !== 'inactif') {
+    if (membre.archiver) {
       return res.status(400).json({
         success: false,
-        message: 'Ce membre n\'est pas suspendu ou inactif'
+        message: 'Ce compte est archivé et ne peut être ni modifié ni supprimé'
       });
+    }
+
+    const validation = isValidTransition('membre', membre.status, 'actif');
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: 'Ce membre ne peut pas être réactivé' });
     }
 
     membre.status = 'actif';
@@ -514,6 +664,52 @@ exports.reactiverMembre = async (req, res) => {
 };
 
 // ============================================================
+// 6b. BANNIR MEMBRE
+// ============================================================
+exports.bannirMembre = async (req, res) => {
+  try {
+    if (req.userRole !== 'President') {
+      return res.status(403).json({
+        success: false,
+        message: 'Seul le président peut bannir des membres'
+      });
+    }
+
+    const membre = await Membre.findById(req.params.id);
+    if (!membre) {
+      return res.status(404).json({
+        success: false,
+        message: 'Membre non trouvé'
+      });
+    }
+
+    if (membre.archiver) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ce compte est archivé et ne peut être ni modifié ni supprimé'
+      });
+    }
+
+    const validation = isValidTransition('membre', membre.status, 'banni');
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: 'Ce membre ne peut pas être banni' });
+    }
+
+    membre.status = 'banni';
+    await membre.save();
+
+    res.json({
+      success: true,
+      message: '🚫 Membre banni avec succès',
+      data: membre
+    });
+  } catch (error) {
+    console.error('❌ Erreur bannirMembre:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+};
+
+// ============================================================
 // 7. DELETE MEMBRE
 // ============================================================
 exports.deleteMembre = async (req, res) => {
@@ -533,14 +729,68 @@ exports.deleteMembre = async (req, res) => {
       });
     }
 
-    await membre.deleteOne();
+    if (membre.archiver) {
+      return res.json({
+        success: true,
+        message: '🗃️ Ce compte est déjà archivé'
+      });
+    }
+
+    membre.archiver = true;
+    await membre.save();
 
     res.json({
       success: true,
-      message: '🗑️ Membre supprimé avec succès'
+      message: '🗑️ Membre archivé avec succès'
     });
   } catch (error) {
     console.error('❌ Erreur deleteMembre:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
+};
+
+// ============================================================
+// 7b. SUPPRESSION DEFINITIVE DU MEMBRE (depuis la page Entretien)
+// ============================================================
+exports.hardDeleteMembre = async (req, res) => {
+  try {
+    if (req.userRole !== 'President') {
+      return res.status(403).json({
+        success: false,
+        message: 'Seul le Président peut supprimer définitivement un membre'
+      });
+    }
+
+    const membre = await Membre.findById(req.params.id);
+    if (!membre) {
+      return res.status(404).json({
+        success: false,
+        message: 'Membre non trouvé'
+      });
+    }
+
+    // Un compte archivé doit d'abord repasser par le statut actif
+    // pour être supprimé définitivement
+    if (membre.archiver) {
+      membre.archiver = false;
+      membre.status = 'actif';
+      await membre.save();
+      console.log(`♻️ Compte archivé remis en actif avant suppression: ${membre.email}`);
+    }
+
+    await Membre.findByIdAndDelete(req.params.id);
+    await Entretien.deleteMany({ membre: req.params.id });
+
+    console.log(`🗑️ Membre supprimé définitivement: ${membre.email}`);
+    res.json({
+      success: true,
+      message: '🗑️ Membre supprimé définitivement'
+    });
+  } catch (error) {
+    console.error('❌ Erreur hardDeleteMembre:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur serveur'
@@ -568,25 +818,31 @@ exports.getStatsMembres = async (req, res) => {
       bannis,
       nonValides,
       refuses,
+      nonInscrits,
       etudiants,
       professionnels,
-      nouveauxMois
+      nouveauxMois,
+      supprimes
     ] = await Promise.all([
-      Membre.countDocuments(),
-      Membre.countDocuments({ status: 'actif' }),
-      Membre.countDocuments({ status: 'en-attente' }),
-      Membre.countDocuments({ status: 'suspendu' }),
-      Membre.countDocuments({ status: 'banni' }),
-      Membre.countDocuments({ status: 'non-validé' }),
+      Membre.countDocuments({ archiver: { $ne: true }, status: { $ne: 'refusé' } }),
+      Membre.countDocuments({ status: 'actif', archiver: { $ne: true } }),
+      Membre.countDocuments({ status: 'en-attente', archiver: { $ne: true } }),
+      Membre.countDocuments({ status: 'suspendu', archiver: { $ne: true } }),
+      Membre.countDocuments({ status: 'banni', archiver: { $ne: true } }),
+      Membre.countDocuments({ status: 'non-validé', archiver: { $ne: true } }),
       Membre.countDocuments({ status: 'refusé' }),
-      Membre.countDocuments({ situationProfessionnelle: 'Étudiant' }),
-      Membre.countDocuments({ situationProfessionnelle: 'Professionnel' }),
+      Membre.countDocuments({ status: 'non-inscrit', archiver: { $ne: true } }),
+      Membre.countDocuments({ situationProfessionnelle: 'Étudiant', archiver: { $ne: true } }),
+      Membre.countDocuments({ situationProfessionnelle: 'Professionnel', archiver: { $ne: true } }),
       Membre.countDocuments({
-        createdAt: { $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) }
-      })
+        createdAt: { $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) },
+        archiver: { $ne: true }
+      }),
+      Membre.countDocuments({ archiver: true, status: { $ne: 'refusé' } })
     ]);
 
     const statsParRole = await Membre.aggregate([
+      { $match: { archiver: { $ne: true } } },
       { $group: { _id: '$role', count: { $sum: 1 } } }
     ]);
 
@@ -600,9 +856,11 @@ exports.getStatsMembres = async (req, res) => {
         bannis,
         nonValides,
         refuses,
+        nonInscrits,
         etudiants,
         professionnels,
         nouveauxMois,
+        supprimes,
         parRole: statsParRole
       }
     });
@@ -620,7 +878,7 @@ exports.getStatsMembres = async (req, res) => {
 // ============================================================
 exports.getPublicStats = async (req, res) => {
   try {
-    const actifs = await Membre.countDocuments({ status: 'actif' });
+    const actifs = await Membre.countDocuments({ status: 'actif', archiver: { $ne: true } });
     res.json({ success: true, data: { actifs } });
   } catch (error) {
     console.error('❌ Erreur getPublicStats:', error);
@@ -804,7 +1062,7 @@ exports.deleteRole = async (req, res) => {
 // ============================================================
 exports.createMembre = async (req, res) => {
   try {
-    const { nom, prenom, email, password, telephone, adresse, situationProfessionnelle, role, status, photo } = req.body;
+    const { nom, prenom, email, password, telephone, adresse, sexe, situationProfessionnelle, role, status, photo } = req.body;
 
     if (!nom || !prenom || !email) {
       return res.status(400).json({
@@ -839,18 +1097,28 @@ exports.createMembre = async (req, res) => {
       photoUrl = result.secure_url;
     }
 
-    const membre = await Membre.create({
+    const membreData = {
       nom, prenom,
       email: email.toLowerCase(),
       password: password || require('crypto').randomBytes(4).toString('hex') + 'A1',
       telephone: telephone || '',
       adresse: adresse || '',
+      sexe: sexe || '',
       situationProfessionnelle: situationProfessionnelle || 'Autre',
       role: targetRole,
-      status: status || 'actif',
+      status: status || 'non-inscrit',
       isEmailVerified: true,
       photo: photoUrl
-    });
+    };
+
+    // Si le rôle a une durée de mandat, définir datePriseFonction et mandatFin
+    if (MANDAT_ROLES.includes(targetRole)) {
+      membreData.datePriseFonction = new Date();
+      membreData.mandatFin = new Date(Date.now() + MANDAT_DUREE_MS);
+      membreData.mandatAnnee = new Date().getFullYear();
+    }
+
+    const membre = await Membre.create(membreData);
 
     res.status(201).json({
       success: true,
@@ -904,9 +1172,13 @@ exports.getParrainList = async (req, res) => {
 };
 
 // ============================================================
-// VALIDER UNE INSCRIPTION DIRECTEMENT (Président) - sans entretien
+// ACCEPTER UN MEMBRE (Président) - avec date d'entretien
 // ============================================================
-exports.validerInscriptionDirect = async (req, res) => {
+// ============================================================
+// ACCEPTER UN MEMBRE (Président) - validation du compte
+// L'entretien a déjà été planifié puis accepté séparément.
+// ============================================================
+exports.acceptMember = async (req, res) => {
   try {
     const membre = await Membre.findById(req.params.id);
     if (!membre) {
@@ -920,86 +1192,31 @@ exports.validerInscriptionDirect = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Ce membre n\'est pas en attente de validation'
+      });
+    }
+
+    // L'entretien doit avoir été accepté avant de valider le compte
+    const entretien = await Entretien.findOne({
+      membre: membre._id,
+      status: 'accepté'
+    }).sort({ dateApprouve: -1 });
+
+    if (!entretien) {
+      return res.status(400).json({
+        success: false,
+        message: 'L\'entretien doit être accepté avant de valider le compte'
       });
     }
 
     membre.status = 'actif';
+    membre.isEmailVerified = true;
     await membre.save();
 
     await sendValidationAccepteeEmail(membre);
-    console.log(`📧 Email validation acceptée envoyé à ${membre.email}`);
 
     return res.json({
       success: true,
-      message: '✅ Inscription validée avec succès',
-      data: membre
-    });
-  } catch (error) {
-    console.error('❌ Erreur validerInscriptionDirect:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur serveur',
-      error: error.message
-    });
-  }
-};
-
-// ============================================================
-// ACCEPTER UN MEMBRE (Président) - avec date d'entretien
-// ============================================================
-exports.acceptMember = async (req, res) => {
-  try {
-    const { dateEntretien, commentaire, lieu } = req.body;
-    if (!dateEntretien) {
-      return res.status(400).json({
-        success: false,
-        message: 'La date d\'entretien est obligatoire'
-      });
-    }
-
-    const membre = await Membre.findById(req.params.id);
-    if (!membre) {
-      return res.status(404).json({
-        success: false,
-        message: 'Membre non trouvé'
-      });
-    }
-
-    if (membre.status !== 'en-attente' && membre.status !== 'non-validé') {
-      return res.status(400).json({
-        success: false,
-        message: 'Ce membre n\'est pas en attente de validation'
-      });
-    }
-
-    const dateDebut = new Date(dateEntretien);
-    const dateFin = new Date(dateDebut.getTime() + 60 * 60 * 1000);
-    const conflit = await Entretien.findOne({
-      date: { $gte: dateDebut, $lt: dateFin }
-    });
-    if (conflit) {
-      return res.status(400).json({
-        success: false,
-        message: 'Un entretien est déjà programmé à cette heure. Veuillez choisir un autre créneau.'
-      });
-    }
-
-    await membre.save();
-
-    const entretien = await Entretien.create({
-      membre: membre._id,
-      date: new Date(dateEntretien),
-      commentaire: commentaire || 'Entretien de bienvenue',
-      lieu: lieu || '',
-      createdBy: req.userId,
-      status: 'demandé'
-    });
-
-    await sendInterviewEmail(membre, entretien);
-
-    return res.json({
-      success: true,
-      message: '✅ Membre accepté. Un email d\'entretien lui a été envoyé.',
+      message: 'Membre validé',
       data: { membre, entretien }
     });
   } catch (error) {
@@ -1025,22 +1242,33 @@ exports.rejectMember = async (req, res) => {
       });
     }
 
-    if (membre.status !== 'en-attente' && membre.status !== 'non-validé') {
+    if (membre.status !== 'en-attente' && membre.status !== 'non-validé' && membre.status !== 'non-inscrit') {
       return res.status(400).json({
         success: false,
-        message: 'Ce membre n\'est pas en attente de validation'
+        message: 'Ce membre ne peut pas être rejeté'
       });
     }
 
+    const { email, nom, prenom } = membre;
     membre.status = 'refusé';
     await membre.save();
 
-    await sendRejectionEmail(membre.email, membre.nom, membre.prenom);
+    // Synchronisation : le refus reste tracé dans la KPI "Refusés"
+    // (le compte n'est pas archivé) et les entretiens en cours passent à "rejeté"
+    await Entretien.updateMany(
+      { membre: membre._id, status: { $in: ['planifié', 'en-cours', 'terminé'] } },
+      { $set: { status: 'rejeté', isApprove: false } }
+    );
+
+    try {
+      await sendRejectionEmail(email, nom, prenom);
+    } catch (mailError) {
+      console.error('❌ Erreur email de rejet:', mailError.message);
+    }
 
     return res.json({
       success: true,
-      message: '❌ Inscription refusée. Membre archivé.',
-      data: membre
+      message: '❌ Inscription refusée. Le compte a été archivé et l\'entretien rejeté.',
     });
   } catch (error) {
     console.error('❌ Erreur rejectMember:', error);

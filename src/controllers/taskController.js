@@ -3,6 +3,7 @@
 const Task = require('../models/Task');
 const Membre = require('../models/Membre');
 const { sendTaskAssignmentEmail } = require('../config/email');
+const { isValidTransition } = require('../services/stateMachine');
 
 // ============================================================
 // 1. CRÉER UNE TÂCHE (Tâche Normale)
@@ -169,6 +170,13 @@ exports.updateTask = async (req, res) => {
       });
     }
 
+    if (req.body.statut && req.body.statut !== task.statut) {
+      const validation = isValidTransition('task', task.statut, req.body.statut);
+      if (!validation.valid) {
+        return res.status(400).json({ success: false, message: validation.message });
+      }
+    }
+
     if (req.body.statut === 'assignée' && req.body.membre) {
       const membreExists = await Membre.findById(req.body.membre);
       if (!membreExists) {
@@ -205,7 +213,42 @@ exports.updateTask = async (req, res) => {
 };
 
 // ============================================================
-// 5. DELETE TASK
+// 5. UPDATE TASK STATUS (avec machine à états)
+// ============================================================
+exports.updateTaskStatus = async (req, res) => {
+  try {
+    const { statut } = req.body;
+
+    const task = await Task.findById(req.params.id);
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Tâche non trouvée' });
+    }
+
+    if (task.createdBy.toString() !== req.userId && req.userRole !== 'President') {
+      return res.status(403).json({ success: false, message: 'Accès non autorisé' });
+    }
+
+    const validation = isValidTransition('task', task.statut, statut);
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: validation.message });
+    }
+
+    task.statut = statut;
+    await task.save();
+
+    const updated = await Task.findById(req.params.id)
+      .populate('membre', 'nom prenom email')
+      .populate('createdBy', 'nom prenom email');
+
+    res.json({ success: true, message: 'Statut mis à jour', data: updated });
+  } catch (error) {
+    console.error('❌ Erreur updateTaskStatus:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+};
+
+// ============================================================
+// 6. DELETE TASK
 // ============================================================
 exports.deleteTask = async (req, res) => {
   try {
@@ -493,6 +536,20 @@ exports.getMediaCalendar = async (req, res) => {
 // ============================================================
 // 10. NOTIFIER UNE TÂCHE MÉDIA
 // ============================================================
+exports.getTaskStats = async (req, res) => {
+  try {
+    const [total, enCours, terminees] = await Promise.all([
+      Task.countDocuments(),
+      Task.countDocuments({ status: { $in: ['créée', 'assignée', 'en-cours', 'en-révision'] } }),
+      Task.countDocuments({ status: 'terminée' })
+    ]);
+    res.json({ success: true, data: { total, enCours, terminees } });
+  } catch (error) {
+    console.error('❌ Erreur getTaskStats:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+};
+
 exports.getTaskCount = async (req, res) => {
   try {
     const count = await Task.countDocuments();
@@ -507,7 +564,7 @@ exports.notifyMediaTasks = async (req, res) => {
   try {
     const { id } = req.params;
     
-    const task = await Task.findById(id).populate('membre', 'nom prenom email');
+    const task = await Task.findById(id).populate('membre', 'nom prenom email archiver');
     if (!task) {
       return res.status(404).json({
         success: false,
@@ -526,6 +583,13 @@ exports.notifyMediaTasks = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Aucun membre assigné à cette tâche'
+      });
+    }
+
+    if (task.membre.archiver) {
+      return res.status(403).json({
+        success: false,
+        message: 'Impossible de notifier ce membre : compte archivé'
       });
     }
 

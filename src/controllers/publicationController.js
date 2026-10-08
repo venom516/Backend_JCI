@@ -3,6 +3,7 @@ const Task = require('../models/Task');
 const Membre = require('../models/Membre');
 const { sendNewPublicationEmail } = require('../config/email');
 const { publishPublication: socialPublish } = require('../services/socialMediaService');
+const { isValidTransition } = require('../services/stateMachine');
 
 // ============================================================
 // 1. CRÉER UNE PUBLICATION
@@ -65,7 +66,8 @@ exports.createPublication = async (req, res) => {
     // Notifier les administrateurs (non bloquant)
     Membre.find({
       role: { $in: ['President', 'ConseillerMedia'] },
-      status: 'actif'
+      status: 'actif',
+      archiver: { $ne: true }
     }).then(admins => {
       const emails = admins.map(m => m.email);
       if (emails.length > 0) {
@@ -131,6 +133,25 @@ exports.getPublications = async (req, res) => {
       success: false,
       message: 'Erreur serveur'
     });
+  }
+};
+
+exports.getPublicationsStats = async (req, res) => {
+  try {
+    const [total, creees, enAttente, publiees, archivees] = await Promise.all([
+      Publication.countDocuments({ status: { $ne: 'supprimée' } }),
+      Publication.countDocuments({ status: { $in: ['créée', 'en-attente'] } }),
+      Publication.countDocuments({ status: 'en-attente' }),
+      Publication.countDocuments({ status: 'publiée' }),
+      Publication.countDocuments({ status: 'archivée' })
+    ]);
+    res.json({
+      success: true,
+      data: { total, creees, enAttente, publiees, archivees }
+    });
+  } catch (error) {
+    console.error('❌ Erreur getPublicationsStats:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 };
 
@@ -264,6 +285,11 @@ exports.publishPublication = async (req, res) => {
       });
     }
 
+    const validation = isValidTransition('publication', publication.status, 'publiée');
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: validation.message });
+    }
+
     publication.status = 'publiée';
     publication.datePublication = new Date();
     await publication.save();
@@ -310,6 +336,11 @@ exports.archivePublication = async (req, res) => {
         success: false,
         message: 'Accès non autorisé'
       });
+    }
+
+    const validation = isValidTransition('publication', publication.status, 'archivée');
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: validation.message });
     }
 
     publication.status = 'archivée';
@@ -373,7 +404,57 @@ exports.updatePublicationStats = async (req, res) => {
 };
 
 // ============================================================
-// 9. PUBLIER DIRECTEMENT SUR LES RÉSEAUX SOCIAUX (SANS DB)
+// 9. SOUMETTRE PUBLICATION (créée → en-attente)
+// ============================================================
+exports.soumettrePublication = async (req, res) => {
+  try {
+    const publication = await Publication.findById(req.params.id);
+    if (!publication) {
+      return res.status(404).json({ success: false, message: 'Publication non trouvée' });
+    }
+    if (publication.createdBy.toString() !== req.userId && req.userRole !== 'President') {
+      return res.status(403).json({ success: false, message: 'Accès non autorisé' });
+    }
+    const validation = isValidTransition('publication', publication.status, 'en-attente');
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: validation.message });
+    }
+    publication.status = 'en-attente';
+    await publication.save();
+    res.json({ success: true, message: 'Publication soumise pour validation', data: publication });
+  } catch (error) {
+    console.error('❌ Erreur soumettrePublication:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+};
+
+// ============================================================
+// 10. REJETER PUBLICATION (en-attente → créée)
+// ============================================================
+exports.rejeterPublication = async (req, res) => {
+  try {
+    const publication = await Publication.findById(req.params.id);
+    if (!publication) {
+      return res.status(404).json({ success: false, message: 'Publication non trouvée' });
+    }
+    if (req.userRole !== 'President') {
+      return res.status(403).json({ success: false, message: 'Seul le président peut rejeter' });
+    }
+    const validation = isValidTransition('publication', publication.status, 'créée');
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: validation.message });
+    }
+    publication.status = 'créée';
+    await publication.save();
+    res.json({ success: true, message: 'Publication renvoyée en création', data: publication });
+  } catch (error) {
+    console.error('❌ Erreur rejeterPublication:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+};
+
+// ============================================================
+// 11. PUBLIER DIRECTEMENT SUR LES RÉSEAUX SOCIAUX (SANS DB)
 // ============================================================
 exports.publishDirect = async (req, res) => {
   try {

@@ -10,6 +10,20 @@ const now = () => new Date();
 const startOfMonth = () => new Date(now().getFullYear(), now().getMonth(), 1);
 const startOfYear = () => new Date(now().getFullYear(), 0, 1);
 
+// La profession est repartie sur deux champs : "travailOuEtude" (historique,
+// renseigne pour tous les membres) et "situationProfessionnelle" (introduit plus
+// tard, presque toujours "Autre" ou vide). On privilegie le premier, et on
+// accepte les deux orthographes avec / sans accent ("Etudiant" et "Étudiant").
+const RE_ETUDIANT = /^(etudiant|étudiant)$/i;
+const RE_PROFESSIONNEL = /^professionnel$/i;
+
+const matchProfession = (re) => ({
+  $or: [
+    { travailOuEtude: re },
+    { travailOuEtude: null, situationProfessionnelle: re }
+  ]
+});
+
 // Aggregates monthly counts for a collection over the last 12 months
 const monthlyAggregation = async (Model, dateField = 'createdAt', match = {}) => {
   const twelveMonthsAgo = new Date(now().getFullYear(), now().getMonth() - 11, 1);
@@ -39,13 +53,13 @@ exports.getPresidentDashboard = async (req, res) => {
     const [totalMembres, nouveauxMois, actifs, etudiants, professionnels,
       totalTasks, tasksEnCours, tasksTerminees, totalEvents, eventsAMois,
       totalNews, newsPubliees, entretiensEnAttente, documents,
-      entretiensProgrammes, entretiensRealises, totalActions,
+      entretiensProgrammes, totalActions,
       publicationsMedia] = await Promise.all([
-      Membre.countDocuments(),
-      Membre.countDocuments({ createdAt: { $gte: startOfMonth() } }),
-      Membre.countDocuments({ status: 'actif' }),
-      Membre.countDocuments({ situationProfessionnelle: 'Étudiant', status: 'actif' }),
-      Membre.countDocuments({ situationProfessionnelle: 'Professionnel', status: 'actif' }),
+      Membre.countDocuments({ archiver: { $ne: true }, status: { $ne: 'refusé' } }),
+      Membre.countDocuments({ createdAt: { $gte: startOfMonth() }, archiver: { $ne: true } }),
+      Membre.countDocuments({ status: 'actif', archiver: { $ne: true } }),
+      Membre.countDocuments({ status: 'actif', archiver: { $ne: true }, ...matchProfession(RE_ETUDIANT) }),
+      Membre.countDocuments({ status: 'actif', archiver: { $ne: true }, ...matchProfession(RE_PROFESSIONNEL) }),
       Task.countDocuments(),
       Task.countDocuments({ statut: { $in: ['en-cours', 'assignée'] } }),
       Task.countDocuments({ statut: 'terminée' }),
@@ -53,10 +67,9 @@ exports.getPresidentDashboard = async (req, res) => {
       Event.countDocuments({ date: { $gte: startOfMonth() } }),
       News.countDocuments(),
       News.countDocuments({ status: 'publiée' }),
-      Entretien.countDocuments({ status: 'en-attente' }),
+      Entretien.countDocuments({ status: 'en-cours' }),
       Document.countDocuments(),
-      Entretien.countDocuments({ status: 'approuvé' }),
-      Entretien.countDocuments({ status: 'réalisé' }),
+      Entretien.countDocuments({ status: 'planifié' }),
       Event.countDocuments({ type: 'Action' }),
       Publication.countDocuments()
     ]);
@@ -65,12 +78,30 @@ exports.getPresidentDashboard = async (req, res) => {
       inscriptionEvolution,
       entretienEvolution,
       membreRepartition,
+      repartitionSexe,
+      repartitionProfession,
       statistiquesMensuelles
     ] = await Promise.all([
       monthlyAggregation(Membre),
       monthlyAggregation(Entretien),
       Membre.aggregate([
         { $group: { _id: '$situationProfessionnelle', count: { $sum: 1 } } },
+        { $sort: { count: -1 } }
+      ]),
+      // Répartition hommes / femmes sur les membres actifs (cohérent avec la KPI "Actifs")
+      // La normalisation (casse / espaces) est faite côté client.
+      Membre.aggregate([
+        { $match: { status: 'actif', archiver: { $ne: true } } },
+        { $group: { _id: { $ifNull: ['$sexe', ''] }, count: { $sum: 1 } } },
+        { $sort: { count: -1 } }
+      ]),
+      // Répartition étudiants / professionnels sur les membres actifs.
+      // Les données réelles sont dans l'ancien champ "travailOuEtude" (renseigné
+      // pour tous les membres). "situationProfessionnelle", introduit plus tard,
+      // est presque toujours "Autre" ou vide : on ne s'en sert qu'en repli.
+      Membre.aggregate([
+        { $match: { status: 'actif', archiver: { $ne: true } } },
+        { $group: { _id: { $ifNull: ['$travailOuEtude', { $ifNull: ['$situationProfessionnelle', ''] }] }, count: { $sum: 1 } } },
         { $sort: { count: -1 } }
       ]),
       (async () => {
@@ -122,9 +153,9 @@ exports.getPresidentDashboard = async (req, res) => {
         stats: { totalMembres, nouveauxMois, actifs, etudiants, professionnels,
           totalTasks, tasksEnCours, tasksTerminees, totalEvents, eventsAMois,
           totalNews, newsPubliees, entretiensEnAttente, documents,
-          entretiensProgrammes, entretiensRealises, totalActions, publicationsMedia },
+          entretiensProgrammes, totalActions, publicationsMedia },
         upcomingEvents, recentTasks, newMembers,
-        chartData: { inscriptionEvolution, entretienEvolution, membreRepartition, statistiquesMensuelles },
+        chartData: { inscriptionEvolution, entretienEvolution, membreRepartition, repartitionSexe, repartitionProfession, statistiquesMensuelles },
         recentActivities
       }
     });
@@ -138,24 +169,24 @@ exports.getSGDashboard = async (req, res) => {
   try {
     const now = new Date();
     const [documents, documentsPV, documentsRapports, documentsODJ,
-      entretiens, entretiensApprouves, events, eventsAGP] = await Promise.all([
+      entretiens, entretiensPlanifies, events, eventsAGP] = await Promise.all([
       Document.countDocuments(),
       Document.countDocuments({ type: 'PV' }),
       Document.countDocuments({ type: 'Rapport' }),
       Document.countDocuments({ type: 'Ordre du jour' }),
       Entretien.countDocuments(),
-      Entretien.countDocuments({ status: 'approuvé' }),
+      Entretien.countDocuments({ status: 'planifié' }),
       Event.countDocuments(),
       Event.countDocuments({ type: 'AGP' })
     ]);
     const recentDocuments = await Document.find().sort({ createdAt: -1 }).limit(10)
       .populate('createdBy', 'nom prenom');
-    const upcomingEntretiens = await Entretien.find({ date: { $gte: now }, status: 'approuvé' })
+    const upcomingEntretiens = await Entretien.find({ date: { $gte: now }, status: 'planifié' })
       .sort({ date: 1 }).limit(5).populate('membre', 'nom prenom').populate('createdBy', 'nom prenom');
     res.json({
       success: true,
       data: { stats: { documents, documentsPV, documentsRapports, documentsODJ,
-        entretiens, entretiensApprouves, events, eventsAGP },
+        entretiens, entretiensPlanifies, events, eventsAGP },
         recentDocuments, upcomingEntretiens }
     });
   } catch (error) {
@@ -197,31 +228,36 @@ exports.getMediaDashboard = async (req, res) => {
 
 exports.getAdminDashboard = async (req, res) => {
   try {
-    const [totalMembres, actifs, enAttente, suspendus, bannis, nonValides,
-      etudiants, professionnels, nouveauxMois] = await Promise.all([
-      Membre.countDocuments(),
-      Membre.countDocuments({ status: 'actif' }),
-      Membre.countDocuments({ status: 'en-attente' }),
-      Membre.countDocuments({ status: 'suspendu' }),
-      Membre.countDocuments({ status: 'banni' }),
-      Membre.countDocuments({ status: 'non-validé' }),
-      Membre.countDocuments({ situationProfessionnelle: 'Étudiant' }),
-      Membre.countDocuments({ situationProfessionnelle: 'Professionnel' }),
+    const [totalMembres, actifs, enAttente, suspendus, bannis, nonValides, refuses, nonInscrits,
+      etudiants, professionnels, nouveauxMois, supprimes] = await Promise.all([
+      Membre.countDocuments({ archiver: { $ne: true }, status: { $ne: 'refusé' } }),
+      Membre.countDocuments({ status: 'actif', archiver: { $ne: true } }),
+      Membre.countDocuments({ status: 'en-attente', archiver: { $ne: true } }),
+      Membre.countDocuments({ status: 'suspendu', archiver: { $ne: true } }),
+      Membre.countDocuments({ status: 'banni', archiver: { $ne: true } }),
+      Membre.countDocuments({ status: 'non-validé', archiver: { $ne: true } }),
+      Membre.countDocuments({ status: 'refusé' }),
+      Membre.countDocuments({ status: 'non-inscrit', archiver: { $ne: true } }),
+      Membre.countDocuments({ archiver: { $ne: true }, ...matchProfession(RE_ETUDIANT) }),
+      Membre.countDocuments({ archiver: { $ne: true }, ...matchProfession(RE_PROFESSIONNEL) }),
       Membre.countDocuments({
-        createdAt: { $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) }
-      })
+        createdAt: { $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) },
+        archiver: { $ne: true }
+      }),
+      Membre.countDocuments({ archiver: true, status: { $ne: 'refusé' } })
     ]);
     const statsParRole = await Membre.aggregate([
+      { $match: { archiver: { $ne: true } } },
       { $group: { _id: '$role', count: { $sum: 1 } } }
     ]);
-    const recentMembres = await Membre.find()
+    const recentMembres = await Membre.find({ archiver: { $ne: true } })
       .sort({ createdAt: -1 }).limit(10)
       .select('nom prenom email role status createdAt photo');
     res.json({
       success: true,
       data: {
-        stats: { totalMembres, actifs, enAttente, suspendus, bannis, nonValides,
-          etudiants, professionnels, nouveauxMois, parRole: statsParRole },
+        stats: { totalMembres, actifs, enAttente, suspendus, bannis, nonValides, refuses, nonInscrits,
+          etudiants, professionnels, nouveauxMois, supprimes, parRole: statsParRole },
         recentMembres
       }
     });

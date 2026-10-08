@@ -1,0 +1,327 @@
+
+> backend-jci-sidi-mansour@1.0.0 dev
+> nodemon server.js
+
+[33m[nodemon] 3.1.14[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): *.*[39m
+[33m[nodemon] watching extensions: js,mjs,cjs,json[39m
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+🚀 Serveur démarré sur le port 5000
+🔗 http://localhost:5000
+✅ MongoDB connecté !
+📊 Base de données: jci-sidi-mansour
+🔄 Initialisation du service de rappel automatique...
+✅ Service de rappel automatique démarré avec succès
+📅 Rappels programmés à 8h et 14h
+✅ Transporteur email prêt (Gmail SMTP)
+✅ Email envoyé à salahbouzidi5160@gmail.com
+📧 Email suspension envoyé à salahbouzidi5160@gmail.com
+✅ Email envoyé à salahbouzidi5160@gmail.com
+📧 Email réactivation envoyé à salahbouzidi5160@gmail.com
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+🚀 Serveur démarré sur le port 5000
+🔗 http://localhost:5000
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+🚀 Serveur démarré sur le port 5000
+🔗 http://localhost:5000
+✅ Transporteur email prêt (Gmail SMTP)
+✅ MongoDB connecté !
+📊 Base de données: jci-sidi-mansour
+🔄 Initialisation du service de rappel automatique...
+✅ Service de rappel automatique démarré avec succès
+📅 Rappels programmés à 8h et 14h
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+🚀 Serveur démarré sur le port 5000
+🔗 http://localhost:5000
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+🚀 Serveur démarré sur le port 5000
+🔗 http://localhost:5000
+[32m[nodemon] restarting due to changes...[39m
+✅ Transporteur email prêt (Gmail SMTP)
+✅ MongoDB connecté !
+📊 Base de données: jci-sidi-mansour
+🔄 Initialisation du service de rappel automatique...
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+🚀 Serveur démarré sur le port 5000
+🔗 http://localhost:5000
+[32m[nodemon] restarting due to changes...[39m
+✅ MongoDB connecté !
+📊 Base de données: jci-sidi-mansour
+🔄 Initialisation du service de rappel automatique...
+✅ Service de rappel automatique démarré avec succès
+📅 Rappels programmés à 8h et 14h
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+🚀 Serveur démarré sur le port 5000
+🔗 http://localhost:5000
+✅ MongoDB connecté !
+📊 Base de données: jci-sidi-mansour
+🔄 Initialisation du service de rappel automatique...
+✅ Service de rappel automatique démarré avec succès
+📅 Rappels programmés à 8h et 14h
+✅ Transporteur email prêt (Gmail SMTP)
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+🚀 Serveur démarré sur le port 5000
+🔗 http://localhost:5000
+✅ Transporteur email prêt (Gmail SMTP)
+✅ MongoDB connecté !
+📊 Base de données: jci-sidi-mansour
+🔄 Initialisation du service de rappel automatique...
+✅ Service de rappel automatique démarré avec succès
+📅 Rappels programmés à 8h et 14h
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+🚀 Serveur démarré sur le port 5000
+🔗 http://localhost:5000
+✅ Transporteur email prêt (Gmail SMTP)
+✅ MongoDB connecté !
+📊 Base de données: jci-sidi-mansour
+🔄 Initialisation du service de rappel automatique...
+✅ Service de rappel automatique démarré avec succès
+📅 Rappels programmés à 8h et 14h
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+🚀 Serveur démarré sur le port 5000
+🔗 http://localhost:5000
+✅ Transporteur email prêt (Gmail SMTP)
+✅ MongoDB connecté !
+📊 Base de données: jci-sidi-mansour
+🔄 Initialisation du service de rappel automatique...
+✅ Service de rappel automatique démarré avec succès
+📅 Rappels programmés à 8h et 14h
+📝 Tentative d'inscription: salahbouzidi5160@gmail.com
+✅ Membre créé: salahbouzidi5160@gmail.com
+✅ Email envoyé à salahbouzidi5160@gmail.com
+📧 Email de confirmation envoyé à salahbouzidi5160@gmail.com avec lien de vérification
+✅ Email envoyé à salahbouzidi345@gmail.com
+📧 Notification envoyée au Président (salahbouzidi345@gmail.com)
+✅ Email envoyé à salahbouzidi5160@gmail.com
+✅ Email envoyé à salahbouzidi5160@gmail.com
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+🚀 Serveur démarré sur le port 5000
+🔗 http://localhost:5000
+✅ Transporteur email prêt (Gmail SMTP)
+✅ MongoDB connecté !
+📊 Base de données: jci-sidi-mansour
+🔄 Initialisation du service de rappel automatique...
+✅ Service de rappel automatique démarré avec succès
+📅 Rappels programmés à 8h et 14h
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+🚀 Serveur démarré sur le port 5000
+🔗 http://localhost:5000
+[32m[nodemon] restarting due to changes...[39m
+✅ MongoDB connecté !
+📊 Base de données: jci-sidi-mansour
+🔄 Initialisation du service de rappel automatique...
+✅ Service de rappel automatique démarré avec succès
+📅 Rappels programmés à 8h et 14h
+✅ Transporteur email prêt (Gmail SMTP)
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+🚀 Serveur démarré sur le port 5000
+🔗 http://localhost:5000
+✅ Transporteur email prêt (Gmail SMTP)
+✅ MongoDB connecté !
+📊 Base de données: jci-sidi-mansour
+🔄 Initialisation du service de rappel automatique...
+✅ Service de rappel automatique démarré avec succès
+📅 Rappels programmés à 8h et 14h
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+⚠️ uncaughtException (ignorée): listen EADDRINUSE: address already in use :::5000
+✅ Transporteur email prêt (Gmail SMTP)
+✅ MongoDB connecté !
+📊 Base de données: jci-sidi-mansour
+🔄 Initialisation du service de rappel automatique...
+✅ Service de rappel automatique démarré avec succès
+📅 Rappels programmés à 8h et 14h
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+⚠️ uncaughtException (ignorée): listen EADDRINUSE: address already in use :::5000
+✅ Transporteur email prêt (Gmail SMTP)
+✅ MongoDB connecté !
+📊 Base de données: jci-sidi-mansour
+🔄 Initialisation du service de rappel automatique...
+✅ Service de rappel automatique démarré avec succès
+📅 Rappels programmés à 8h et 14h
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+⚠️ uncaughtException (ignorée): listen EADDRINUSE: address already in use :::5000
+✅ Transporteur email prêt (Gmail SMTP)
+✅ MongoDB connecté !
+📊 Base de données: jci-sidi-mansour
+🔄 Initialisation du service de rappel automatique...
+✅ Service de rappel automatique démarré avec succès
+📅 Rappels programmés à 8h et 14h
+✅ MongoDB reconnecté !
+✅ MongoDB reconnecté !
+[2026-09-27T08:48:38.260Z] [PID: 20508] [32m[NODE-CRON][32m [33m[WARN][0m missed execution at Sat Sep 26 2026 08:00:00 GMT+0100 (heure normale d’Europe centrale)! Possible blocking IO or high CPU user at the same process used by node-cron.
+[2026-09-27T08:48:38.261Z] [PID: 20508] [32m[NODE-CRON][32m [33m[WARN][0m missed execution at Sun Sep 27 2026 08:00:00 GMT+0100 (heure normale d’Europe centrale)! Possible blocking IO or high CPU user at the same process used by node-cron.
+[2026-09-27T08:48:38.280Z] [PID: 20508] [32m[NODE-CRON][32m [33m[WARN][0m missed execution at Sat Sep 26 2026 14:00:00 GMT+0100 (heure normale d’Europe centrale)! Possible blocking IO or high CPU user at the same process used by node-cron.
+✅ MongoDB reconnecté !
+✅ MongoDB reconnecté !
+⚠️ MongoDB déconnecté, reconnexion...
+✅ MongoDB reconnecté !
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+⚠️ uncaughtException (ignorée): Cannot find module './src/routes/formationRoutes'
+Require stack:
+- C:\Users\salah\OneDrive\Desktop\plateform JCISidiMansour\backend\server.js
+✅ Transporteur email prêt (Gmail SMTP)
+[32m[nodemon] clean exit - waiting for changes before restart[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+[32m[nodemon] restarting due to changes...[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+⚠️ uncaughtException (ignorée): Cannot find module './src/routes/formationRoutes'
+Require stack:
+- C:\Users\salah\OneDrive\Desktop\plateform JCISidiMansour\backend\server.js
+✅ Transporteur email prêt (Gmail SMTP)
+[32m[nodemon] clean exit - waiting for changes before restart[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+⚠️ uncaughtException (ignorée): Cannot find module './src/routes/formationRoutes'
+Require stack:
+- C:\Users\salah\OneDrive\Desktop\plateform JCISidiMansour\backend\server.js
+✅ Transporteur email prêt (Gmail SMTP)
+[32m[nodemon] clean exit - waiting for changes before restart[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+⚠️ uncaughtException (ignorée): formationRoutes is not defined
+✅ Transporteur email prêt (Gmail SMTP)
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node server.js`[39m
+
+=== EMAIL CONFIGURATION (Nodemailer) ===
+EMAIL_USER : configuré
+EMAIL_PASS : configuré
+
+⚠️ uncaughtException (ignorée): listen EADDRINUSE: address already in use :::5000
+✅ MongoDB connecté !
+📊 Base de données: jci-sidi-mansour
+🔄 Initialisation du service de rappel automatique...
+✅ Service de rappel automatique démarré avec succès
+📅 Rappels programmés à 8h et 14h
+✅ Transporteur email prêt (Gmail SMTP)

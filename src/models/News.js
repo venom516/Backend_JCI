@@ -3,10 +3,12 @@ const mongoose = require('mongoose');
 const newsSchema = new mongoose.Schema({
   titre: { type: String, required: true, trim: true },
   contenu: { type: String, required: true },
-  image: { type: String, default: 'default-news.jpg' },
+  // Image dynamique : URL Cloudinary. Aucune image par defaut, une actualite
+  // peut etre enregistree sans photo.
+  image: { type: String, default: null },
   status: { 
     type: String, 
-    enum: ['brouillon', 'en-attente', 'publiée', 'archivée', 'supprimée'], 
+    enum: ['brouillon', 'publiée', 'archivée'], 
     default: 'brouillon' 
   },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Membre', required: true },
