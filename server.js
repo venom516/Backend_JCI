@@ -69,7 +69,7 @@ app.use(
           "'self'",
           "http://localhost:*",
           "https://*.mongodb.net",
-          "https://jcisidimansour-brown.vercel.app"
+          process.env.FRONTEND_URL
         ],
 
         frameSrc: [
@@ -190,7 +190,7 @@ app.get('/api/health', async (req, res) => {
     try {
       await mongoose.connection.db.admin().ping();
       alive = true;
-    } catch (_) {}
+    } catch (_) { }
   }
   res.json({
     status: alive ? 'ok' : 'error',
