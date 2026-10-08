@@ -28,6 +28,10 @@ const PORT = process.env.PORT || 5001;
 // Confiance proxy (nécessaire pour rate limiting derrière un proxy)
 app.set('trust proxy', 1);
 
+const allowedOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map(u => u.trim())
+  : ['http://localhost:5173'];
+
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -69,7 +73,9 @@ app.use(
           "'self'",
           "http://localhost:*",
           "https://*.mongodb.net",
-          process.env.FRONTEND_URL
+          "https://*.onrender.com", // Autorise tous vos sous-domaines sur Render
+          "https://backend-jci.onrender.com", // Votre URL backend explicite
+          ...allowedOrigins // Inclut également le ou les URLs frontend
         ],
 
         frameSrc: [
@@ -84,11 +90,9 @@ app.use(
   })
 );
 
-// CORS - configuration stricte (AVANT rate limiting pour que les erreurs 429 aient les headers CORS)
+// CORS - configuration stricte
 const corsOptions = {
-  origin: process.env.FRONTEND_URL
-    ? process.env.FRONTEND_URL.split(',').map(u => u.trim())
-    : ['http://localhost:5173'],
+  origin: allowedOrigins,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
