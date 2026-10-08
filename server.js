@@ -7,7 +7,6 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
-const multer = require('multer');
 require('dotenv').config();
 
 // Doit precedre tout require() de src/config/email.js (fait via les
@@ -209,36 +208,10 @@ app.get('/', (req, res) => {
   });
 });
 
-// 404 JSON : le front attend du JSON sur toute route inconnue (§1.1)
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Route introuvable'
-  });
-});
-
 // ──────────────────────────────────────────────
 // Gestion centralisée des erreurs
 // ──────────────────────────────────────────────
 app.use((err, req, res, next) => {
-  // Erreurs upload : messages exploitables côté client
-  if (err instanceof multer.MulterError) {
-    const messages = {
-      LIMIT_FILE_SIZE: 'Fichier trop volumineux (10 Mo maximum)',
-      LIMIT_FILE_COUNT: 'Trop de fichiers',
-      LIMIT_UNEXPECTED_FILE: 'Champ de fichier inattendu'
-    };
-    return res.status(400).json({
-      success: false,
-      message: messages[err.code] || "Erreur d'upload"
-    });
-  }
-
-  // Erreurs Cloudinary / filter de fichier
-  if (err.message && /Type de fichier non support|Cloudinary|File extension/i.test(err.message)) {
-    return res.status(400).json({ success: false, message: err.message });
-  }
-
   console.error('❌ Erreur non gérée:', err);
 
   if (err && err.code === 'LIMIT_FILE_SIZE') {

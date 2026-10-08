@@ -6,17 +6,7 @@ const Entretien = require('../models/Entretien');
 const Task = require('../models/Task');
 const Event = require('../models/Event');
 const News = require('../models/News');
-<<<<<<< HEAD
 const { isValidTransition } = require('../services/stateMachine');
-=======
-<<<<<<< HEAD
-const { isValidTransition } = require('../services/stateMachine');
-=======
-const { pourRecherche } = require('../utils/search');
-const { telephoneRenseigne, regexTelephone } = require('../utils/telephone');
-const { escapeHtml } = require('../utils/html');
->>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
->>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
 const { 
   sendEmail,
   sendEmailChangeVerification,
@@ -50,10 +40,6 @@ const MANDAT_DUREE_MS = 365 * 24 * 60 * 60 * 1000; // 1 an en ms
 // ============================================================
 exports.getMembres = async (req, res) => {
   try {
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
     const { status, role, search, page = 1, limit = 10000, archived = 'false', refused } = req.query;
     const filter = {};
 
@@ -73,75 +59,35 @@ exports.getMembres = async (req, res) => {
     if (status && !vueRefuses) {
       const statuses = status.split(',').map(s => s.trim());
       filter.status = statuses.length > 1 ? { $in: statuses } : statuses[0];
-=======
-    const { status, role, search, page = 1, limit, archived, refused } = req.query;
-    const filter = {};
-
-    // 9 : plafonner cote serveur. Sans cela, une requete sans limit charge la
-    // base entiere (defaut 10000 sans bornes).
-    const limite = Math.max(1, Math.min(parseInt(limit, 10) || 100, 100));
-    const pageN = Math.max(1, parseInt(page, 10) || 1);
-
-    // 1. refused a la priorite sur archived et sur status : la memoire du
-    // filtre doit refleter la demande, pas l'empilement de trois affectations.
-    const estRefuse = refused === 'true' || refused === true;
-
-    if (estRefuse) {
-      filter.status = 'refusé';
-    } else {
-      // 2. archived : defaut 'false' => exclure les comptes archives.
-      //    Les deux conditions coexistent avec status (elles portent sur des
-      //    champs differents) au lieu de l'une qui ecrase l'autre.
-      const estArchive = archived === 'true' || archived === true;
-      filter.archiver = estArchive ? true : { $ne: true };
-
-      // 3. status : CSV => $in, sinon egalite. A defaut, on masque les refuses.
-      if (status) {
-        const liste = String(status).split(',').map(s => s.trim()).filter(Boolean);
-        filter.status = liste.length > 1 ? { $in: liste } : liste[0];
-      } else {
-        filter.status = { $ne: 'refusé' };
-      }
->>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
     }
-
-    // 4. role : meme syntaxe CSV que status (l'asymetrie d'origine est un defaut)
-    if (role) {
-      const roles = String(role).split(',').map(s => s.trim()).filter(Boolean);
-      if (roles.length === 1) filter.role = roles[0];
-      else if (roles.length > 1) filter.role = { $in: roles };
-    }
-
-    // 5. recherche : regex echappee (voir utils/search)
+    if (role) filter.role = role;
     if (search) {
       filter.$or = [
-        { nom: { $regex: pourRecherche(search), $options: 'i' } },
-        { prenom: { $regex: pourRecherche(search), $options: 'i' } },
-        { email: { $regex: pourRecherche(search), $options: 'i' } }
+        { nom: { $regex: search, $options: 'i' } },
+        { prenom: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
       ];
     }
-
-    // 6. Si membre normal, ne voir que son profil
+    
+    // Si membre normal, ne voir que son profil
     if (req.userRole === 'Membre') filter._id = req.userId;
 
-    const skip = (pageN - 1) * limite;
-
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
     const [membres, total] = await Promise.all([
       Membre.find(filter)
-        // Liste negative complete : les deux tokens de reset sont omis par defaut
-        // (select:false) mais la liste reste correcte si la protection disparait.
-        .select('-password -codeValidation -codeValidationExpire -resetPasswordToken -resetPasswordExpires')
+        .select('-password -codeValidation -codeValidationExpire')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limite),
+        .limit(parseInt(limit)),
       Membre.countDocuments(filter)
     ]);
 
     res.json({
       success: true,
       count: total,
-      page: pageN,
-      totalPages: Math.ceil(total / limite),
+      page: parseInt(page),
+      totalPages: Math.ceil(total / parseInt(limit)),
       data: membres
     });
   } catch (error) {
@@ -156,7 +102,7 @@ exports.getMembres = async (req, res) => {
 exports.getMembreById = async (req, res) => {
   try {
     const membre = await Membre.findById(req.params.id)
-      .select('-password -codeValidation -codeValidationExpire -resetPasswordToken -resetPasswordExpires');
+      .select('-password -codeValidation -codeValidationExpire');
     
     if (!membre) {
       return res.status(404).json({
@@ -165,8 +111,7 @@ exports.getMembreById = async (req, res) => {
       });
     }
 
-    const allowed = ['President', 'SecretaireGeneral', 'VPFD'];
-    if (!allowed.includes(req.userRole) && req.userId.toString() !== req.params.id) {
+    if (req.userRole !== 'President' && req.userRole !== 'SecretaireGeneral' && req.userId.toString() !== req.params.id) {
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé'
@@ -229,10 +174,6 @@ exports.updateMembre = async (req, res) => {
       }
     }
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
     // Vérifier l'unicité du téléphone si modifié.
     // - on compare sur les chiffres seuls, sinon "51-60-15-43" passerait à côté
     //   de "51601543" alors que c'est le même numéro ;
@@ -251,18 +192,6 @@ exports.updateMembre = async (req, res) => {
           { tel: { $in: [telSaisi, telNettoye] } }
         ]
       });
-<<<<<<< HEAD
-=======
-=======
-    // Vérifier l'unicité du téléphone si modifié : comparaison en chiffres
-    // seuls, sinon "98 123 456" et "98123456" passent toutes les deux.
-    if (telephoneRenseigne(req.body.telephone)) {
-      const telExistant = await Membre.findOne({
-        telephone: regexTelephone(req.body.telephone),
-        _id: { $ne: req.params.id }
-      }).select('_id');
->>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
->>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
       if (telExistant) {
         return res.status(400).json({
           success: false,
@@ -404,57 +333,20 @@ exports.updateMembre = async (req, res) => {
       req.body.status = 'suspendu';
     }
 
-    // Photo : base64 uniquement, jamais une URL distante fournie par le client (§1.9.4)
-    let photoBase64 = null;
-    if (typeof req.body.photo === 'string' && req.body.photo.startsWith('data:')) {
-      photoBase64 = req.body.photo;
+    // Upload photo to Cloudinary if base64
+    if (req.body.photo && req.body.photo.startsWith('data:')) {
+      const result = await cloudinary.uploader.upload(req.body.photo, { folder: 'jci-uploads/members' });
+      req.body.photo = result.secure_url;
     }
 
-    // Liste blanche d'écriture (§1.9.4). photo est traite a part : base64 uniquement.
-    const CHAMPS_EDITABLES = [
-      'nom', 'prenom', 'email', 'telephone', 'adresse', 'sexe',
-      'situationProfessionnelle', 'travailOuEtude', 'dateNaissance',
-      'urlFacebook', 'urlLinkedIn', 'langues', 'competences', 'pointsForts',
-      'societe', 'hobbies', 'association', 'connaissanceZone',
-      'connaissanceJCI', 'pointsDeveloppement'
-    ];
-    const CHAMPS_PRIVES = [
-      'role', 'status', 'archiver', 'isEmailVerified', 'codeValidation',
-      'codeValidationExpire', 'resetPasswordToken', 'resetPasswordExpires',
-      'mandatAnnee', 'mandatFin', 'datePriseFonction', 'lastLogin',
-      'parrainId', 'parrain'
-    ];
-
-    const { password, ...rest } = req.body;
-    const updateData = {};
-    for (const champ of CHAMPS_EDITABLES) {
-      if (rest[champ] !== undefined) updateData[champ] = rest[champ];
-    }
-    if (req.userRole === 'President') {
-      for (const champ of CHAMPS_PRIVES) {
-        if (rest[champ] !== undefined) updateData[champ] = rest[champ];
-      }
-    }
-
-    // Un changement d'email invalide toujours la vérification, y compris en auto-édition
-    if (emailChanged) {
-      updateData.isEmailVerified = false;
-      updateData.status = 'suspendu';
-    }
-
-    if (photoBase64) {
-      const result = await cloudinary.uploader.upload(photoBase64, { folder: 'jci-uploads/members' });
-      updateData.photo = result.secure_url;
-    }
+    // Extraire le password pour le traiter via le hook pre('save')
+    const { password, ...updateData } = req.body;
 
     let updated;
     if (password) {
       // Utiliser save() pour que le hook de hashage s'exécute
       Object.assign(membre, updateData);
       membre.password = password;
-      // Même règle que resetPassword : les JWT émis avant ce changement
-      // deviennent invalides.
-      membre.passwordChangedAt = new Date();
       await membre.save();
       updated = membre.toObject();
       delete updated.password;
@@ -465,7 +357,7 @@ exports.updateMembre = async (req, res) => {
         req.params.id,
         updateData,
         { new: true, runValidators: true }
-      ).select('-password -codeValidation -codeValidationExpire -resetPasswordToken -resetPasswordExpires');
+      ).select('-password -codeValidation -codeValidationExpire');
     }
 
     // Vérification Sénateur automatique
@@ -506,10 +398,10 @@ exports.updateMembre = async (req, res) => {
           `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
             <h2 style="color: #f57c00;">🔐 Votre email a été modifié</h2>
-            <p>Bonjour <strong>${escapeHtml(updated.prenom)} ${escapeHtml(updated.nom)}</strong>,</p>
+            <p>Bonjour <strong>${updated.prenom} ${updated.nom}</strong>,</p>
             <p>Votre adresse email a été modifiée sur la plateforme JCI Sidi Mansour.</p>
             <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 15px 0;">
-              <p><strong>Nouvel email :</strong> ${escapeHtml(newEmail)}</p>
+              <p><strong>Nouvel email :</strong> ${newEmail}</p>
             </div>
             <p>Si vous n'êtes pas à l'origine de cette modification, veuillez contacter immédiatement l'association.</p>
             <hr style="border: 1px solid #e0e0e0;" />
@@ -664,7 +556,7 @@ exports.validateMembre = async (req, res) => {
 // ============================================================
 exports.suspendreMembre = async (req, res) => {
   try {
-    if (!['President', 'SecretaireGeneral', 'VPFD'].includes(req.userRole)) {
+    if (req.userRole !== 'President') {
       return res.status(403).json({
         success: false,
         message: 'Seul l\'administrateur ou le président peut suspendre des membres'
@@ -720,7 +612,7 @@ exports.suspendreMembre = async (req, res) => {
 // ============================================================
 exports.reactiverMembre = async (req, res) => {
   try {
-    if (!['President', 'SecretaireGeneral', 'VPFD'].includes(req.userRole)) {
+    if (req.userRole !== 'President') {
       return res.status(403).json({
         success: false,
         message: 'Seul l\'administrateur ou le président peut réactiver des membres'
@@ -822,7 +714,7 @@ exports.bannirMembre = async (req, res) => {
 // ============================================================
 exports.deleteMembre = async (req, res) => {
   try {
-    if (!['President', 'SecretaireGeneral', 'VPFD'].includes(req.userRole)) {
+    if (req.userRole !== 'President' && req.userRole !== 'SecretaireGeneral') {
       return res.status(403).json({
         success: false,
         message: 'Seul l\'administrateur peut supprimer des membres'
@@ -1187,18 +1079,6 @@ exports.createMembre = async (req, res) => {
       });
     }
 
-    // Unicité du téléphone : comparaison en chiffres seuls, sinon
-    // "98 123 456" et "98123456" passent toutes les deux.
-    if (telephoneRenseigne(telephone)) {
-      const telephoneOccupe = await Membre.findOne({ telephone: regexTelephone(telephone) }).select('_id');
-      if (telephoneOccupe) {
-        return res.status(400).json({
-          success: false,
-          message: 'Ce numéro de téléphone est déjà utilisé'
-        });
-      }
-    }
-
     // Vérifier unicité du rôle si c'est un rôle unique
     const targetRole = role || 'Membre';
     if (UNIQUE_ROLES.includes(targetRole)) {
@@ -1350,7 +1230,7 @@ exports.acceptMember = async (req, res) => {
 };
 
 // ============================================================
-// REJETER UN MEMBRE (Président) - statut refusé
+// REJETER UN MEMBRE (Président) - archive avec statut refusé
 // ============================================================
 exports.rejectMember = async (req, res) => {
   try {
@@ -1388,16 +1268,7 @@ exports.rejectMember = async (req, res) => {
 
     return res.json({
       success: true,
-<<<<<<< HEAD
       message: '❌ Inscription refusée. Le compte a été archivé et l\'entretien rejeté.',
-=======
-<<<<<<< HEAD
-      message: '❌ Inscription refusée. Le compte a été archivé et l\'entretien rejeté.',
-=======
-      message: 'Inscription refusée',
-      data: membre
->>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
->>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
     });
   } catch (error) {
     console.error('❌ Erreur rejectMember:', error);

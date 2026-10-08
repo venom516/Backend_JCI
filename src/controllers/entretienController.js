@@ -165,7 +165,6 @@ exports.getEntretienById = async (req, res) => {
 };
 
 exports.terminerEntretien = async (req, res) => {
-<<<<<<< HEAD
   try {
     if (req.userRole !== 'President') {
       return res.status(403).json({ success: false, message: 'Seul le président peut terminer un entretien' });
@@ -191,38 +190,6 @@ exports.approveEntretien = async (req, res) => {
   try {
     if (req.userRole !== 'President') {
       return res.status(403).json({ success: false, message: 'Seul le président peut accepter' });
-=======
-  try {
-    if (req.userRole !== 'President') {
-      return res.status(403).json({ success: false, message: 'Seul le président peut terminer un entretien' });
-    }
-    const entretien = await Entretien.findById(req.params.id);
-    if (!entretien) {
-      return res.status(404).json({ success: false, message: 'Entretien non trouvé' });
-    }
-    const validation = isValidTransition('entretien', entretien.status, 'terminé');
-    if (!validation.valid) {
-      return res.status(400).json({ success: false, message: validation.message });
-    }
-    entretien.status = 'terminé';
-    await entretien.save();
-    res.json({ success: true, message: 'Entretien terminé', data: entretien });
-  } catch (error) {
-    console.error('❌ Erreur terminerEntretien:', error);
-    res.status(500).json({ success: false, message: 'Erreur serveur' });
-  }
-};
-
-exports.approveEntretien = async (req, res) => {
-  try {
-<<<<<<< HEAD
-    if (req.userRole !== 'President') {
-      return res.status(403).json({ success: false, message: 'Seul le président peut accepter' });
-=======
-    if (req.userRole !== 'President' && req.userRole !== 'VPFD') {
-      return res.status(403).json({ success: false, message: 'Seul le président ou VPFD peut approuver' });
->>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
->>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
     }
     const entretien = await Entretien.findById(req.params.id).populate('membre');
     if (!entretien) {
@@ -260,8 +227,8 @@ exports.approveEntretien = async (req, res) => {
 
 exports.rejectEntretien = async (req, res) => {
   try {
-    if (req.userRole !== 'President' && req.userRole !== 'VPFD') {
-      return res.status(403).json({ success: false, message: 'Seul le président ou VPFD peut rejeter' });
+    if (req.userRole !== 'President') {
+      return res.status(403).json({ success: false, message: 'Seul le président peut rejeter' });
     }
     const entretien = await Entretien.findById(req.params.id).populate('membre');
     if (!entretien) {
@@ -291,39 +258,8 @@ exports.rejectEntretien = async (req, res) => {
       }
     }
 
-<<<<<<< HEAD
     entretien.status = 'rejeté';
     entretien.isApprove = false;
-=======
-<<<<<<< HEAD
-    entretien.status = 'rejeté';
-    entretien.isApprove = false;
-=======
-    res.json({ success: true, message: 'Candidature refusée (entretien annulé)', data: entretien });
-  } catch (error) {
-    console.error('❌ Erreur rejectEntretien:', error);
-    res.status(500).json({ success: false, message: 'Erreur serveur' });
-  }
-};
-
-exports.realiseEntretien = async (req, res) => {
-  try {
-    if (req.userRole !== 'President' && req.userRole !== 'VPFD') {
-      return res.status(403).json({ success: false, message: 'Seul le président ou VPFD peut marquer comme réalisé' });
-    }
-    const { note, remarques } = req.body;
-    const entretien = await Entretien.findById(req.params.id);
-    if (!entretien) {
-      return res.status(404).json({ success: false, message: 'Entretien non trouvé' });
-    }
-    if (entretien.status !== 'approuvé') {
-      return res.status(400).json({ success: false, message: 'Entretien doit être approuvé avant d\'être réalisé' });
-    }
-    entretien.status = 'réalisé';
-    entretien.note = note || null;
-    entretien.remarques = remarques || null;
->>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
->>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
     await entretien.save();
 
     if (membre) {
@@ -349,7 +285,7 @@ exports.updateEntretien = async (req, res) => {
     if (!entretien) {
       return res.status(404).json({ success: false, message: 'Entretien non trouvé' });
     }
-    if (entretien.membre.toString() !== req.userId && req.userRole !== 'President' && req.userRole !== 'VPFD') {
+    if (entretien.membre.toString() !== req.userId && req.userRole !== 'President') {
       return res.status(403).json({ success: false, message: 'Accès non autorisé' });
     }
     if (entretien.status !== 'planifié') {
@@ -386,7 +322,7 @@ exports.deleteEntretien = async (req, res) => {
     if (!entretien) {
       return res.status(404).json({ success: false, message: 'Entretien non trouvé' });
     }
-    if (entretien.createdBy.toString() !== req.userId && req.userRole !== 'President' && req.userRole !== 'VPFD') {
+    if (entretien.createdBy.toString() !== req.userId && req.userRole !== 'President') {
       return res.status(403).json({ success: false, message: 'Accès non autorisé' });
     }
     if (entretien.status !== 'planifié') {

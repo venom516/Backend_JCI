@@ -29,12 +29,7 @@ const sendAutoReminders = async () => {
     console.log(`📋 ${tasks.length} tâches média trouvées pour rappel`);
 
     let sentCount = 0;
-    let skippedCount = 0;
     for (const task of tasks) {
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
       if (task.membre && task.membre.email && !task.membre.archiver) {
         await sendAutoTaskReminderEmail(task.membre.email, task.membre, task);
         task.notificationSent = true;
@@ -42,30 +37,11 @@ const sendAutoReminders = async () => {
         await task.save();
         sentCount++;
         console.log(`📧 Rappel automatique envoyé à ${task.membre.email} pour: ${task.titre}`);
-=======
-      if (task.membre && task.membre.email) {
-        // 6.4 : ne marquer que si l'envoi a reellement reussi. Un template
-        // suspendu renvoie null et un envoi echoue renvoie false ; marquer
-        // inconditionnellement consommerait le rappel J-1 sans rien envoyer,
-        // et le filtre notificationSent l'empecherait d'etre retente.
-        const envoye = await sendAutoTaskReminderEmail(task.membre.email, task.membre, task);
-
-        if (envoye === true) {
-          task.notificationSent = true;
-          task.notificationDate = new Date();
-          await task.save();
-          sentCount++;
-          console.log(`📧 Rappel automatique envoyé à ${task.membre.email} pour: ${task.titre}`);
-        } else {
-          skippedCount++;
-          console.log(`⏸️ Rappel conservé (non envoyé) pour: ${task.titre}`);
-        }
->>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
       }
     }
 
-    console.log(`✅ ${sentCount} rappels envoyés, ${skippedCount} conservés pour réessai`);
-    return { success: true, sent: sentCount, skipped: skippedCount };
+    console.log(`✅ ${sentCount} rappels automatiques envoyés avec succès`);
+    return { success: true, sent: sentCount };
   } catch (error) {
     console.error('❌ Erreur sendAutoReminders:', error);
     return { success: false, error: error.message };

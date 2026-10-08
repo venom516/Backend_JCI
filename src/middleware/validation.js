@@ -796,13 +796,15 @@ const validateTaskData = (data) => {
 // ============================================================
 // SANITIZE
 // ============================================================
-// Normalisation des espaces uniquement. L'echappement HTML ne se fait plus a
-// l'entree : il transformait les donnees stockees en entites ("O'Brien" devenait
-// "O&#x27;Brien") et cassait silencieusement la recherche (0 resultat). Le HTML
-// etant produit uniquement par les gabarits d'e-mail, c'est la qu'a lieu
-// l'echappement (voir escapeHtml dans config/email.js) ; React echappe de son
-// cote tout ce qui est rendu dans le navigateur.
-const sanitizeString = (str) => (typeof str === 'string' ? validator.trim(str) : str);
+
+const URL_FIELDS = new Set(['urlFacebook', 'urlLinkedIn', 'photo']);
+
+const sanitizeString = (str, fieldName) => {
+  if (typeof str !== 'string') return str;
+  const trimmed = validator.trim(str);
+  if (URL_FIELDS.has(fieldName)) return trimmed;
+  return validator.escape(trimmed);
+};
 
 const sanitizeObject = (obj) => {
   if (!obj || typeof obj !== 'object') return obj;
@@ -810,11 +812,13 @@ const sanitizeObject = (obj) => {
   const result = {};
   for (const [key, value] of Object.entries(obj)) {
     if (Array.isArray(value)) {
-      result[key] = value.map(item => sanitizeString(item));
+      result[key] = value.map(item => 
+        typeof item === 'string' ? sanitizeString(item, key) : item
+      );
     } else if (typeof value === 'object' && value !== null) {
       result[key] = sanitizeObject(value);
     } else if (typeof value === 'string') {
-      result[key] = sanitizeString(value);
+      result[key] = sanitizeString(value, key);
     } else {
       result[key] = value;
     }
@@ -822,11 +826,14 @@ const sanitizeObject = (obj) => {
   return result;
 };
 
-// Middleware de normalisation des entrees
+// Middleware de sanitization
 const sanitizeInput = (req, res, next) => {
+  const photo = req.body?.photo;
+  if (photo) delete req.body.photo;
   req.body = sanitizeObject(req.body);
   req.query = sanitizeObject(req.query);
   req.params = sanitizeObject(req.params);
+  if (photo) req.body.photo = photo;
   next();
 };
 

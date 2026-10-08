@@ -76,19 +76,6 @@ const role = {
       });
     }
     next();
-  },
-
-  // Président, Secrétaire Général, ou le membre lui-même (édition de son propre profil)
-  isSelfOrStaff: (req, res, next) => {
-    const isStaff = req.userRole === 'President' || req.userRole === 'SecretaireGeneral';
-    const isSelf = req.userId && req.params.id && req.userId.toString() === req.params.id;
-    if (!isStaff && !isSelf) {
-      return res.status(403).json({
-        success: false,
-        message: 'Accès refusé. Seul le Président, le Secrétaire Général ou vous-même pouvez modifier ce profil.'
-      });
-    }
-    next();
   }
 };
 

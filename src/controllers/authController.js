@@ -9,7 +9,6 @@ const {
   sendNewMemberNotificationToPresident,
   sendForgotPasswordCode
 } = require('../config/email');
-const { telephoneRenseigne, regexTelephone } = require('../utils/telephone');
 
 // ============================================================
 // GENERATE TOKEN
@@ -20,36 +19,11 @@ const generateToken = (id) => {
   });
 };
 
-// Source unique des statuts qui interdisent l'acces. auth.js porte les memes
-// regles avec des messages differents : toute divergence ici doit etre
-// reportee la-bas aussi.
-const STATUTS_ACCES_REFUSES = ['banni', 'suspendu', 'refusé'];
-
-// Tolérance de 60 s sur l'expiration des codes de vérification et de
-// réinitialisation : absorbe le décalage entre l'horloge du serveur et celle
-// qui a généré le code. Comparée ainsi, une expiration survenue il y a moins
-// d'une minute est encore acceptée.
-const TOLERANCE_CODE_MS = 60 * 1000;
-const expirationCode = () => new Date(Date.now() - TOLERANCE_CODE_MS);
-
 // ============================================================
 // GENERATE VALIDATION CODE
 // ============================================================
 const generateValidationCode = () => {
-  return crypto.randomInt(100000, 1000000).toString();
-};
-
-// Le code de reinitialisation est stocke hache : une fuite de la base ne
-// permet pas de reinitialiser le mot de passe d'un compte (§1.9.7).
-const hashResetCode = (code) =>
-  crypto.createHash('sha256').update(String(code)).digest('hex');
-
-const verifyResetCode = (code, storedHash) => {
-  if (!storedHash) return false;
-  const a = Buffer.from(hashResetCode(code), 'hex');
-  const b = Buffer.from(storedHash, 'hex');
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
+  return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
 // ============================================================
@@ -130,18 +104,6 @@ exports.register = async (req, res) => {
         success: false,
         message: 'Cet email est déjà utilisé'
       });
-    }
-
-    // ✅ Unicité du téléphone : comparaison en chiffres seuls, sinon
-    // "98 123 456" et "98123456" passent toutes les deux.
-    if (telephoneRenseigne(telephone)) {
-      const telephoneOccupe = await Membre.findOne({ telephone: regexTelephone(telephone) }).select('_id');
-      if (telephoneOccupe) {
-        return res.status(400).json({
-          success: false,
-          message: 'Ce numéro de téléphone est déjà utilisé'
-        });
-      }
     }
 
     // ✅ Générer token de vérification (JWT)
@@ -256,7 +218,7 @@ exports.verifyEmail = async (req, res) => {
       {
         email: email.toLowerCase(),
         codeValidation: code,
-        codeValidationExpire: { $gt: expirationCode() },
+        codeValidationExpire: { $gt: new Date() },
         isEmailVerified: false
       },
       {
@@ -394,6 +356,7 @@ exports.login = async (req, res) => {
       });
     }
 
+    // ✅ Vérifier le statut
     if (membre.status === 'banni') {
       return res.status(403).json({
         success: false,
@@ -408,10 +371,6 @@ exports.login = async (req, res) => {
       });
     }
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
     if (membre.status === 'banni') {
       return res.status(403).json({
         success: false,
@@ -419,11 +378,6 @@ exports.login = async (req, res) => {
       });
     }
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
->>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
     if (membre.archiver) {
       return res.status(403).json({
         success: false,
@@ -431,15 +385,7 @@ exports.login = async (req, res) => {
       });
     }
 
-<<<<<<< HEAD
     if (membre.status === 'non-inscrit' || membre.status === 'non-validé' || membre.status === 'en-attente' || membre.status === 'refusé') {
-=======
-<<<<<<< HEAD
-    if (membre.status === 'non-inscrit' || membre.status === 'non-validé' || membre.status === 'en-attente' || membre.status === 'refusé') {
-=======
-    if (membre.status === 'non-validé' || membre.status === 'en-attente' || membre.status === 'refusé') {
->>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
->>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
       return res.status(403).json({
         success: false,
         message: 'Votre compte est en attente de validation'
@@ -599,7 +545,7 @@ exports.login = async (req, res) => {
 exports.getMe = async (req, res) => {
   try {
     const membre = await Membre.findById(req.userId)
-      .select('-codeValidation -codeValidationExpire -resetPasswordToken -resetPasswordExpires');
+      .select('-password -codeValidation -codeValidationExpire');
     
     if (!membre) {
       return res.status(404).json({
@@ -661,8 +607,8 @@ exports.forgotPassword = async (req, res) => {
       });
     }
 
-    const code = crypto.randomInt(100000, 1000000).toString();
-    membre.resetPasswordToken = hashResetCode(code);
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    membre.resetPasswordToken = code;
     membre.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
     await membre.save();
 
@@ -701,18 +647,11 @@ exports.verifyResetCode = async (req, res) => {
 
     const membre = await Membre.findOne({
       email: email.toLowerCase(),
-      resetPasswordToken: { $exists: true },
-      resetPasswordExpires: { $gt: expirationCode() }
+      resetPasswordToken: code,
+      resetPasswordExpires: { $gt: new Date() }
     });
 
     if (!membre) {
-      return res.status(400).json({
-        success: false,
-        message: 'Code invalide ou expiré'
-      });
-    }
-
-    if (!verifyResetCode(code, membre.resetPasswordToken)) {
       return res.status(400).json({
         success: false,
         message: 'Code invalide ou expiré'
@@ -762,18 +701,11 @@ exports.resetPassword = async (req, res) => {
 
     const membre = await Membre.findOne({
       email: email.toLowerCase(),
-      resetPasswordToken: { $exists: true },
-      resetPasswordExpires: { $gt: expirationCode() }
-    }).select('+password +resetPasswordToken');
+      resetPasswordToken: code,
+      resetPasswordExpires: { $gt: new Date() }
+    });
 
     if (!membre) {
-      return res.status(400).json({
-        success: false,
-        message: 'Code invalide ou expiré'
-      });
-    }
-
-    if (!verifyResetCode(code, membre.resetPasswordToken)) {
       return res.status(400).json({
         success: false,
         message: 'Code invalide ou expiré'
@@ -789,10 +721,6 @@ exports.resetPassword = async (req, res) => {
     }
 
     membre.password = newPassword;
-    // Invalidation de toutes les sessions : un JWT emis avant cet instant est
-    // rejete par auth. Sans cela, un ancien token reste valide 7 jours apres
-    // une reinitialisation de mot de passe.
-    membre.passwordChangedAt = new Date();
     membre.resetPasswordToken = undefined;
     membre.resetPasswordExpires = undefined;
     await membre.save();
@@ -858,7 +786,7 @@ exports.loginWithToken = async (req, res) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const membre = await Membre.findById(decoded.id).select('-codeValidation -codeValidationExpire -resetPasswordToken -resetPasswordExpires');
+    const membre = await Membre.findById(decoded.id).select('-password -validationCode -resetCode');
 
     if (!membre) {
       return res.status(404).json({ success: false, message: 'Membre introuvable' });
@@ -897,17 +825,10 @@ exports.memberTokenLogin = async (req, res) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const membre = await Membre.findById(decoded.id).select('-codeValidation -codeValidationExpire -resetPasswordToken -resetPasswordExpires');
+    const membre = await Membre.findById(decoded.id).select('-password -validationCode -resetCode');
 
-    // Un compte banni, suspendu, refusé ou archivé ne doit jamais obtenir de JWT,
-    // même avec un lien membre valide (§1.9.3).
-    if (!membre || membre.archiver || STATUTS_ACCES_REFUSES.includes(membre.status)) {
-      return res.status(403).json({ success: false, message: 'Compte indisponible' });
-    }
-    // La claim type est signe à la génération ; sans ce contrôle un jeton de
-    // vérification d'email serait structurellement interchangeable.
-    if (decoded.type !== 'member-link') {
-      return res.status(403).json({ success: false, message: 'Jeton invalide' });
+    if (!membre) {
+      return res.status(404).json({ success: false, message: 'Membre introuvable' });
     }
 
     const newToken = generateToken(membre._id);

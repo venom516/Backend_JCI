@@ -33,18 +33,11 @@ router.get('/:id', auth, validateObjectId, getTaskById);
 
 // Routes protégées
 router.post('/', auth, validateTask, createTask);
-router.post('/media', auth, role.hasRole(['President', 'ConseillerMedia', 'VPFD']), validateTask, createTaskMedia);
+router.post('/media', auth, role.isConseillerMedia, validateTask, createTaskMedia);
 router.put('/:id', auth, validateObjectId, updateTask);
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 29bd9519b9b62cd2af1619d33b79e59fa7e241c3
 router.put('/:id/status', auth, validateObjectId, updateTaskStatus);
 router.delete('/:id', auth, role.isPresident, validateObjectId, deleteTask);
-=======
-router.delete('/:id', auth, role.hasRole(['President', 'VPFD']), validateObjectId, deleteTask);
->>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
 router.post('/:id/comments', auth, validateObjectId, addComment);
-router.post('/:id/notify', auth, role.hasRole(['President', 'ConseillerMedia', 'VPFD']), notifyMediaTasks);
+router.post('/:id/notify', auth, role.isConseillerMedia, notifyMediaTasks);
 
 module.exports = router;
