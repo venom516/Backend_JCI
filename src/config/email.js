@@ -2,6 +2,7 @@ const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const Membre = require('../models/Membre');
 const SiteConfig = require('../models/SiteConfig');
+const { escapeHtml } = require('../utils/html');
 
 const MEMBER_TOKEN_EXPIRY = process.env.MEMBER_TOKEN_EXPIRY || '30d';
 
@@ -103,11 +104,15 @@ const emailLayout = (title, content) => `
   </div>
 `;
 
+// L'échappement HTML se fait a la CONSTRUCTION du gabarit (escapeHtml, issue
+// de utils/html.js) : sanitizeInput ne transforme plus les entrees en entites,
+// c'est donc ce point qui neutralise ce qui provient d'un utilisateur.
+
 const iconTag = (svg, label) => `
   <div style="display: flex; align-items: flex-start; gap: 10px; margin: 6px 0;">
     <div style="flex-shrink: 0; width: 24px; height: 24px; margin-top: 1px;">${svg}</div>
     <div style="flex: 1;">
-      <strong style="color: #64748b; font-size: 13px; font-weight: 600;">${label}</strong>
+      <strong style="color: #64748b; font-size: 13px; font-weight: 600;">${escapeHtml(label)}</strong>
     </div>
   </div>
 `;
@@ -116,24 +121,33 @@ const iconValue = (svg, label, value) => `
   <div style="display: flex; align-items: flex-start; gap: 10px; margin: 6px 0;">
     <div style="flex-shrink: 0; width: 24px; height: 24px; margin-top: 1px;">${svg}</div>
     <div style="flex: 1;">
-      <strong style="color: #64748b; font-size: 13px; font-weight: 600;">${label}:</strong>
-      <span style="color: #1e293b; font-size: 14px; margin-left: 4px;">${value}</span>
+      <strong style="color: #64748b; font-size: 13px; font-weight: 600;">${escapeHtml(label)}:</strong>
+      <span style="color: #1e293b; font-size: 14px; margin-left: 4px;">${escapeHtml(value)}</span>
     </div>
   </div>
 `;
 
 // ============================================================
+<<<<<<< HEAD
 // TRANSPORTEUR NODEMAILER (Gmail SMTP)
+=======
+// TRANSPORTEUR — Gmail SMTP, singleton, dégradé gracieux
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
 // ============================================================
 
 let transporter = null;
 
 console.log('');
+<<<<<<< HEAD
 console.log('=== EMAIL CONFIGURATION (Nodemailer) ===');
+=======
+console.log('=== SMTP CONFIGURATION ===');
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
 console.log('EMAIL_USER : ' + (process.env.EMAIL_USER ? 'configuré' : 'absent'));
 console.log('EMAIL_PASS : ' + (process.env.EMAIL_PASS ? 'configuré' : 'absent'));
 console.log('');
 
+<<<<<<< HEAD
 const initTransporter = () => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     console.log('❌ Emails désactivés — EMAIL_USER ou EMAIL_PASS manquant');
@@ -158,6 +172,20 @@ const initTransporter = () => {
 };
 
 initTransporter();
+=======
+if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+  console.log('❌ Emails désactivés — EMAIL_USER ou EMAIL_PASS manquant');
+} else {
+  transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    }
+  });
+  console.log('✅ Transporteur Gmail prêt');
+}
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
 
 // ============================================================
 // FONCTION PRINCIPALE D'ENVOI
@@ -165,25 +193,65 @@ initTransporter();
 
 const sendEmail = async (to, subject, html, text) => {
   if (!transporter) {
+<<<<<<< HEAD
     console.log('⏳ Transporteur indisponible, email non envoyé à', to);
+=======
+    console.log('⏳ Email non configuré, email non envoyé à', to);
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
     return null;
   }
 
   try {
     await transporter.sendMail({
+<<<<<<< HEAD
       from: process.env.EMAIL_FROM || `"JCI Sidi Mansour" <${process.env.EMAIL_USER}>`,
       to: to,
+=======
+      from: `"JCI Sidi Mansour" <${process.env.EMAIL_USER}>`,
+      to: [to],
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
       subject: subject,
       html: html || text,
-      text: text || html,
+      text: text || html
     });
     console.log('✅ Email envoyé à', to);
     return true;
-
   } catch (error) {
+<<<<<<< HEAD
     console.log('❌ Erreur d\'envoi à', to, ':', error.message);
+=======
+    // Jamais d'exception : un échec email ne doit pas faire echouer la requete metier
+    console.error('❌ Erreur d\'envoi à', to, ':', error.message);
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
     return false;
   }
+};
+
+// ============================================================
+// 6.2 — TEMPLATES SUSPENDUS
+// ============================================================
+// Ces 7 envois sont suspendus (no-op). Ils ne doivent pas etre reactives sans
+// demande explicite : retirer un nom d'ici est une decision, jamais un defaut.
+// Le garde est en tete de chaque fonction : le gabarit reste intact et la
+// reactivation ne demande que de vider cette liste.
+const TEMPLATES_SUSPENDUS = new Set([
+  'sendNewDocumentEmail',
+  'sendTaskAssignmentEmail',
+  'sendNewEventEmail',
+  'sendNewPublicationEmail',
+  'sendNewNewsEmail',
+  'sendTaskReminderEmail',
+  'sendAutoTaskReminderEmail',
+]);
+
+// Retourne true si l'envoi doit etre saute. null est la valeur "non envoye"
+// attendue par les appelants (reminderService, taskController).
+const suspendu = (nom) => {
+  if (TEMPLATES_SUSPENDUS.has(nom)) {
+    console.log('⏸️ Email suspendu (6.2):', nom);
+    return true;
+  }
+  return false;
 };
 
 // ============================================================
@@ -194,7 +262,7 @@ const sendRegistrationEmail = async (email, nom, prenom, token) => {
   const subject = 'Inscription - JCI Sidi Mansour';
   const verifyLink = `${FRONTEND_URL}/verify-email?token=${token}`;
   const html = emailLayout('Inscription reçue', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${prenom} ${nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(prenom)} ${escapeHtml(nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Votre inscription a été reçue avec succès. Veuillez vérifier votre adresse email en cliquant sur le bouton ci-dessous :</p>
     <div style="text-align: center; margin: 24px 0;">
       <a href="${verifyLink}" style="${STYLES.btn} ${STYLES.btnPrimary}">Vérifier mon email</a>
@@ -242,7 +310,7 @@ const sendNewMemberNotificationToPresident = async (presidentEmail, membre) => {
 const sendValidationAcceptedEmail = async (membre, entretien) => {
   const subject = 'Compte validé - JCI Sidi Mansour';
   const html = emailLayout('Compte validé', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Félicitations ! Votre compte JCI Sidi Mansour a été validé par le Président. Vous pouvez maintenant accéder à votre espace personnel.</p>
     <div style="text-align: center; margin: 20px 0;">
       <a href="${getMemberLink(membre, 'dashboard')}" style="${STYLES.btn} ${STYLES.btnPrimary}">Accéder à mon espace</a>
@@ -274,8 +342,13 @@ const sendInterviewEmail = async (membre, entretien) => {
   const lieu = entretien.lieu || await getLieuEntretien();
   const subject = 'Entretien de bienvenue - JCI Sidi Mansour';
   const html = emailLayout('Entretien de bienvenue', `
+<<<<<<< HEAD
     <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
     <p style="${STYLES.paragraph}">Un entretien de bienvenue a été planifié pour vous accueillir au sein de JCI Sidi Mansour.</p>
+=======
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
+    <p style="${STYLES.paragraph}">Votre inscription a été acceptée par le Président. Un entretien de bienvenue a été planifié pour vous accueillir.</p>
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
     <div style="${STYLES.cardGreen}">
       ${iconValue(SVG.calendar, 'Date de début', new Date(entretien.date).toLocaleString('fr-FR'))}
       ${entretien.dateFin ? iconValue(SVG.calendar, 'Date de fin', new Date(entretien.dateFin).toLocaleString('fr-FR')) : ''}
@@ -333,7 +406,7 @@ const sendValidationConfirmationToPresident = async (presidentEmail, membre, ent
 const sendRejectionEmail = async (email, nom, prenom) => {
   const subject = 'Refus de votre inscription';
   const html = emailLayout('Demande rejetée', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${prenom} ${nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(prenom)} ${escapeHtml(nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Votre demande d'inscription à JCI Sidi Mansour n'a pas été retenue.</p>
     <p style="${STYLES.paragraph}">Si vous avez des questions, vous pouvez contacter l'association.</p>
   `);
@@ -347,7 +420,7 @@ const sendRejectionEmail = async (email, nom, prenom) => {
 const sendValidationAccepteeEmail = async (membre) => {
   const subject = 'Validation de votre inscription';
   const html = emailLayout('Inscription validée', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Votre inscription à JCI Sidi Mansour a été acceptée par le Président.</p>
     <p style="${STYLES.paragraph}">Votre compte est maintenant actif : connectez-vous avec votre adresse email et votre mot de passe pour accéder à votre espace personnel et participer aux activités de l'association.</p>
     <div style="text-align: center; margin: 20px 0;">
@@ -365,7 +438,7 @@ const sendValidationAccepteeEmail = async (membre) => {
 const sendSuspensionEmail = async (email, nom, prenom) => {
   const subject = 'Compte suspendu - JCI Sidi Mansour';
   const html = emailLayout('Compte suspendu', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${prenom} ${nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(prenom)} ${escapeHtml(nom)}</strong>,</p>
     <div style="${STYLES.cardYellow}">
       ${iconTag(SVG.pause, 'Votre compte a été suspendu par le Président. Pour toute question, veuillez contacter l\'association.')}
     </div>
@@ -381,7 +454,7 @@ const sendEmailChangeVerification = async (email, nom, prenom, token) => {
   const subject = 'Vérification de votre nouvel email - JCI Sidi Mansour';
   const verifyLink = `${FRONTEND_URL}/verify-email?token=${token}`;
   const html = emailLayout('Vérification email', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${prenom} ${nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(prenom)} ${escapeHtml(nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Votre adresse email a été modifiée. Pour confirmer votre nouvelle adresse et réactiver votre compte, veuillez cliquer sur le bouton ci-dessous :</p>
     <div style="text-align: center; margin: 24px 0;">
       <a href="${verifyLink}" style="${STYLES.btn} ${STYLES.btnPrimary}">Confirmer mon email</a>
@@ -401,7 +474,7 @@ const sendEmailChangeVerification = async (email, nom, prenom, token) => {
 const sendReactivationEmail = async (email, nom, prenom, membreId) => {
   const subject = 'Compte réactivé - JCI Sidi Mansour';
   const html = emailLayout('Compte réactivé', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${prenom} ${nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(prenom)} ${escapeHtml(nom)}</strong>,</p>
     <div style="${STYLES.cardGreen}">
       ${iconTag(SVG.refresh, 'Votre compte a été réactivé par le Président. Vous pouvez maintenant accéder à votre espace personnel.')}
     </div>
@@ -416,6 +489,7 @@ const sendReactivationEmail = async (email, nom, prenom, membreId) => {
 // 8. NOUVEAU DOCUMENT
 // ============================================================
 
+<<<<<<< HEAD
 // const sendNewDocumentEmail = async (emails, document, user) => {
 //   const subject = `Nouveau document: ${document.titre}`;
 //   for (const email of emails) {
@@ -443,11 +517,42 @@ const sendReactivationEmail = async (email, nom, prenom, membreId) => {
 //   }
 //   return true;
 // };
+=======
+const sendNewDocumentEmail = async (emails, document, user) => {
+  if (suspendu('sendNewDocumentEmail')) return null;
+  const subject = `Nouveau document: ${document.titre}`;
+  for (const email of emails) {
+    let membreLink = `${FRONTEND_URL}/documents`;
+    try {
+      const membre = await Membre.findOne({ email }).select('_id prenom nom');
+      if (membre) membreLink = getMemberLink(membre, 'dashboard');
+    } catch {}
+    const html = emailLayout('Nouveau document', `
+      <p style="${STYLES.paragraph}">Un nouveau document a été uploadé sur la plateforme.</p>
+      <div style="${STYLES.card}">
+        ${iconValue(SVG.document, 'Titre', document.titre)}
+        ${iconValue(SVG.tag, 'Type', document.type)}
+        ${iconValue(SVG.clipboard, 'Description', document.description || 'Aucune description')}
+        ${iconValue(SVG.user, 'Uploadé par', `${user.prenom} ${user.nom}`)}
+        ${iconValue(SVG.calendar, 'Date', new Date().toLocaleString())}
+        ${iconValue(SVG.upload, 'Fichier', document.fichierNom || 'Non spécifié')}
+        ${iconValue(SVG.tag, 'Taille', document.fichierTaille ? `${(document.fichierTaille / 1024).toFixed(2)} KB` : 'Non spécifié')}
+      </div>
+      <div style="text-align: center; margin: 20px 0;">
+        <a href="${membreLink}" style="${STYLES.btn} ${STYLES.btnPrimary}">Voir les documents</a>
+      </div>
+    `);
+    await sendEmail(email, subject, html);
+  }
+  return true;
+};
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
 
 // ============================================================
 // 9. NOUVELLE TÂCHE ASSIGNÉE
 // ============================================================
 
+<<<<<<< HEAD
 // const sendTaskAssignmentEmail = async (email, membre, task) => {
 //   const subject = `Nouvelle tâche: ${task.titre}`;
 //   const html = emailLayout('Nouvelle tâche assignée', `
@@ -466,11 +571,33 @@ const sendReactivationEmail = async (email, nom, prenom, membreId) => {
 //   `);
 //   return sendEmail(email, subject, html);
 // };
+=======
+const sendTaskAssignmentEmail = async (email, membre, task) => {
+  if (suspendu('sendTaskAssignmentEmail')) return null;
+  const subject = `Nouvelle tâche: ${task.titre}`;
+  const html = emailLayout('Nouvelle tâche assignée', `
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
+    <p style="${STYLES.paragraph}">Une nouvelle tâche vous a été assignée.</p>
+    <div style="${STYLES.card}">
+      ${iconValue(SVG.clipboard, 'Titre', task.titre)}
+      ${iconValue(SVG.clipboard, 'Description', task.description || 'Aucune description')}
+      ${iconValue(SVG.clock, 'Deadline', new Date(task.deadline).toLocaleString())}
+      ${iconValue(SVG.tag, 'Priorité', task.priority || 'Moyenne')}
+      ${iconValue(SVG.document, 'Type', task.type || 'Task Normale')}
+    </div>
+    <div style="text-align: center; margin: 20px 0;">
+      <a href="${getMemberLink(membre, 'tasks')}" style="${STYLES.btn} ${STYLES.btnPrimary}">Voir mes tâches</a>
+    </div>
+  `);
+  return sendEmail(email, subject, html);
+};
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
 
 // ============================================================
 // 10. NOUVEL ÉVÉNEMENT
 // ============================================================
 
+<<<<<<< HEAD
 // const sendNewEventEmail = async (email, membre, event) => {
 //   const subject = `Nouvel événement: ${event.titre}`;
 //   const html = emailLayout('Nouvel événement', `
@@ -491,16 +618,80 @@ const sendReactivationEmail = async (email, nom, prenom, membreId) => {
 // };
 
 
+=======
+const sendNewEventEmail = async (email, membre, event) => {
+  if (suspendu('sendNewEventEmail')) return null;
+  const subject = `Nouvel événement: ${event.titre}`;
+  const html = emailLayout('Nouvel événement', `
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
+    <p style="${STYLES.paragraph}">Un nouvel événement a été créé sur la plateforme.</p>
+    <div style="${STYLES.card}">
+      ${iconValue(SVG.calendar, 'Titre', event.titre)}
+      ${iconValue(SVG.tag, 'Type', event.type)}
+      ${iconValue(SVG.clipboard, 'Description', event.description || 'Aucune description')}
+      ${iconValue(SVG.calendar, 'Date', new Date(event.date).toLocaleString())}
+      ${iconValue(SVG.pin, 'Lieu', event.lieu)}
+    </div>
+    <div style="text-align: center; margin: 20px 0;">
+      <a href="${getMemberLink(membre, 'events')}" style="${STYLES.btn} ${STYLES.btnPrimary}">Voir les événements</a>
+    </div>
+  `);
+  return sendEmail(email, subject, html);
+};
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
 
 // ============================================================
 // 12. ENTRETIEN TERMINÉ - ADMISSION ACCEPTÉE
 // ============================================================
 
+<<<<<<< HEAD
+=======
+const sendEntretienRequestEmail = async (presidentEmail, membre, entretien) => {
+  const subject = `Demande d'entretien: ${membre.prenom} ${membre.nom}`;
+  const html = emailLayout('Demande d\'entretien', `
+    <p style="${STYLES.paragraph}">Un membre a demandé un entretien.</p>
+    <div style="${STYLES.card}">
+      ${iconValue(SVG.user, 'Membre', `${membre.prenom} ${membre.nom}`)}
+      ${iconValue(SVG.mail, 'Email', membre.email)}
+      ${iconValue(SVG.calendar, 'Date demandée', new Date(entretien.date).toLocaleString())}
+      ${iconValue(SVG.clipboard, 'Commentaire', entretien.commentaire || 'Aucun commentaire')}
+    </div>
+    <div style="text-align: center; margin: 20px 0;">
+      <a href="${FRONTEND_URL}/admin" style="${STYLES.btn} ${STYLES.btnSuccess}; margin-right: 8px;">Approuver</a>
+      <a href="${FRONTEND_URL}/admin" style="${STYLES.btn} ${STYLES.btnDanger}">Rejeter</a>
+    </div>
+  `);
+  return sendEmail(presidentEmail, subject, html);
+};
+
+// ============================================================
+// 12. ENTRETIEN APPROUVÉ
+// ============================================================
+
+const sendEntretienApprovedEmail = async (email, membre, entretien) => {
+  const subject = 'Demande d\'entretien approuvée - JCI Sidi Mansour';
+  const html = emailLayout('Entretien approuvé', `
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
+    <p style="${STYLES.paragraph}">Votre demande d'entretien a été approuvée par le Président.</p>
+    <div style="${STYLES.cardGreen}">
+      ${iconValue(SVG.calendar, 'Date', new Date(entretien.date).toLocaleString('fr-FR'))}
+      ${iconValue(SVG.clipboard, 'Commentaire', entretien.commentaire || 'Aucun')}
+    </div>
+    <p style="${STYLES.paragraph}">Vous serez contacté(e) pour plus de détails.</p>
+    <div style="text-align: center; margin: 20px 0;">
+      <a href="${getMemberLink(membre, 'dashboard')}" style="${STYLES.btn} ${STYLES.btnPrimary}">Accéder à mon espace</a>
+    </div>
+  `);
+  return sendEmail(email, subject, html);
+};
+
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
 // ============================================================
 // 13. ENTRETIEN REJETÉ
 // ============================================================
 
 const sendEntretienRejectedEmail = async (email, membre, entretien) => {
+<<<<<<< HEAD
   const subject = 'JCI Sidi Mansour - Suite de votre entretien';
   const html = emailLayout('Entretien terminé', `
     <p style="${STYLES.greeting}">Bonjour <strong>${membre.prenom} ${membre.nom}</strong>,</p>
@@ -510,6 +701,12 @@ const sendEntretienRejectedEmail = async (email, membre, entretien) => {
       ${iconValue(SVG.calendar, 'Date', new Date(entretien.date).toLocaleString('fr-FR'))}
       ${iconValue(SVG.clipboard, 'Commentaire', entretien.commentaire || 'Aucun')}
     </div>
+=======
+  const subject = 'Demande d\'entretien - JCI Sidi Mansour';
+  const html = emailLayout('Entretien refusé', `
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
+    <p style="${STYLES.paragraph}">Votre demande d'entretien n'a pas été retenue.</p>
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
     <p style="${STYLES.paragraph}">Si vous avez des questions, veuillez contacter l'association.</p>
   `);
   return sendEmail(email, subject, html);
@@ -519,6 +716,7 @@ const sendEntretienRejectedEmail = async (email, membre, entretien) => {
 // 14. NOUVELLE PUBLICATION
 // ============================================================
 
+<<<<<<< HEAD
 // const sendNewPublicationEmail = async (emails, publication, user) => {
 //   const subject = `Nouvelle publication: ${publication.titre}`;
 //   for (const email of emails) {
@@ -545,11 +743,41 @@ const sendEntretienRejectedEmail = async (email, membre, entretien) => {
 //   }
 // //   return true;
 // };
+=======
+const sendNewPublicationEmail = async (emails, publication, user) => {
+  if (suspendu('sendNewPublicationEmail')) return null;
+  const subject = `Nouvelle publication: ${publication.titre}`;
+  for (const email of emails) {
+    let membreLink = `${FRONTEND_URL}/publications`;
+    try {
+      const membre = await Membre.findOne({ email }).select('_id prenom nom');
+      if (membre) membreLink = getMemberLink(membre, 'dashboard');
+    } catch {}
+    const html = emailLayout('Nouvelle publication', `
+      <p style="${STYLES.paragraph}">Une nouvelle publication a été créée sur la plateforme.</p>
+      <div style="${STYLES.card}">
+        ${iconValue(SVG.megaphone, 'Titre', publication.titre)}
+        ${iconValue(SVG.clipboard, 'Légende', publication.caption || 'Aucune légende')}
+        ${iconValue(SVG.tag, 'Type', publication.type)}
+        ${iconValue(SVG.mail, 'Réseaux', (publication.socialMedia && Array.isArray(publication.socialMedia)) ? publication.socialMedia.join(', ') : 'Non spécifié')}
+        ${iconValue(SVG.user, 'Créé par', `${user.prenom} ${user.nom}`)}
+        ${iconValue(SVG.calendar, 'Date', new Date().toLocaleString())}
+      </div>
+      <div style="text-align: center; margin: 20px 0;">
+        <a href="${membreLink}" style="${STYLES.btn} ${STYLES.btnPrimary}">Voir les publications</a>
+      </div>
+    `);
+    await sendEmail(email, subject, html);
+  }
+  return true;
+};
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
 
 // ============================================================
 // 15. NOUVELLE ACTUALITÉ
 // ============================================================
 
+<<<<<<< HEAD
 // const sendNewNewsEmail = async (emails, news, user) => {
 //   const subject = `Nouvelle actualité: ${news.titre}`;
 //   for (const email of emails) {
@@ -574,11 +802,39 @@ const sendEntretienRejectedEmail = async (email, membre, entretien) => {
 //   }
 // //   return true;
 // };
+=======
+const sendNewNewsEmail = async (emails, news, user) => {
+  if (suspendu('sendNewNewsEmail')) return null;
+  const subject = `Nouvelle actualité: ${news.titre}`;
+  for (const email of emails) {
+    let membreLink = `${FRONTEND_URL}/news`;
+    try {
+      const membre = await Membre.findOne({ email }).select('_id prenom nom');
+      if (membre) membreLink = getMemberLink(membre, 'dashboard');
+    } catch {}
+    const html = emailLayout('Nouvelle actualité', `
+      <p style="${STYLES.paragraph}">Une nouvelle actualité a été publiée sur la plateforme.</p>
+      <div style="${STYLES.card}">
+        ${iconValue(SVG.newspaper, 'Titre', news.titre)}
+        ${iconValue(SVG.clipboard, 'Contenu', news.contenu ? (news.contenu.substring(0, 200) + (news.contenu.length > 200 ? '...' : '')) : '' )}
+        ${iconValue(SVG.user, 'Publié par', `${user.prenom} ${user.nom}`)}
+        ${iconValue(SVG.calendar, 'Date', new Date().toLocaleString())}
+      </div>
+      <div style="text-align: center; margin: 20px 0;">
+        <a href="${membreLink}" style="${STYLES.btn} ${STYLES.btnPrimary}">Lire l'actualité</a>
+      </div>
+    `);
+    await sendEmail(email, subject, html);
+  }
+  return true;
+};
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
 
 // ============================================================
 // 16. RAPPEL DE TÂCHE MÉDIA
 // ============================================================
 
+<<<<<<< HEAD
 // const sendTaskReminderEmail = async (email, membre, task) => {
 //   const subject = `Rappel - Tâche Média: ${task.titre}`;
 //   const html = emailLayout('Rappel de tâche Média', `
@@ -602,11 +858,38 @@ const sendEntretienRejectedEmail = async (email, membre, entretien) => {
 //   `);
 //   return sendEmail(email, subject, html);
 // };
+=======
+const sendTaskReminderEmail = async (email, membre, task) => {
+  if (suspendu('sendTaskReminderEmail')) return null;
+  const subject = `Rappel - Tâche Média: ${task.titre}`;
+  const html = emailLayout('Rappel de tâche Média', `
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
+    <p style="${STYLES.paragraph}">Un rappel concernant votre tâche média ci-dessous.</p>
+    <div style="${STYLES.card}">
+      ${iconValue(SVG.clipboard, 'Titre', task.titre)}
+      ${iconValue(SVG.clipboard, 'Description', task.description || 'Aucune description')}
+      ${iconValue(SVG.calendar, 'Date', new Date(task.deadline).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }))}
+      ${iconValue(SVG.clock, 'Heure', new Date(task.deadline).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }))}
+      ${iconValue(SVG.tag, 'Priorité', task.priority || 'Moyenne')}
+      ${iconValue(SVG.pin, 'Lieu', task.location || 'Non spécifié')}
+    </div>
+    <div style="${STYLES.cardYellow}">
+      ${iconTag(SVG.warning, 'Cette tâche nécessite votre attention. Veuillez la compléter avant la date limite.')}
+    </div>
+    <div style="text-align: center; margin: 20px 0;">
+      <a href="${getMemberLink(membre, 'tasks')}" style="${STYLES.btn} ${STYLES.btnPrimary}; margin-right: 6px;">Voir la tâche</a>
+      <a href="${getMemberLink(membre, 'calendar')}" style="${STYLES.btn} ${STYLES.btnOutline}">Calendrier</a>
+    </div>
+  `);
+  return sendEmail(email, subject, html);
+};
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
 
 // ============================================================
 // 17. RAPPEL AUTOMATIQUE - TÂCHES MÉDIA
 // ============================================================
 
+<<<<<<< HEAD
 // const sendAutoTaskReminderEmail = async (email, membre, task) => {
 //   const subject = `Rappel automatique: ${task.titre} (dans 24h)`;
 //   const html = emailLayout('Rappel automatique', `
@@ -628,6 +911,30 @@ const sendEntretienRejectedEmail = async (email, membre, entretien) => {
 //   `);
 //   return sendEmail(email, subject, html);
 // };
+=======
+const sendAutoTaskReminderEmail = async (email, membre, task) => {
+  if (suspendu('sendAutoTaskReminderEmail')) return null;
+  const subject = `Rappel automatique: ${task.titre} (dans 24h)`;
+  const html = emailLayout('Rappel automatique', `
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(membre.prenom)} ${escapeHtml(membre.nom)}</strong>,</p>
+    <p style="${STYLES.paragraph}">Votre tâche média arrive à échéance.</p>
+    <div style="${STYLES.card}">
+      ${iconValue(SVG.clipboard, 'Titre', task.titre)}
+    </div>
+    <div style="${STYLES.cardRed}">
+      ${iconValue(SVG.clock, 'Échéance', new Date(task.deadline).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) + ' à ' + new Date(task.deadline).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }))}
+      ${iconTag(SVG.warning, 'Temps restant : Moins de 24h')}
+    </div>
+    <div style="${STYLES.card}">
+      ${iconValue(SVG.user, 'Assigné à', `${membre.prenom} ${membre.nom}`)}
+    </div>
+    <div style="text-align: center; margin: 20px 0;">
+      <a href="${getMemberLink(membre, 'tasks')}" style="${STYLES.btn} ${STYLES.btnPrimary}">Voir la tâche</a>
+    </div>
+  `);
+  return sendEmail(email, subject, html);
+};
+>>>>>>> 4b5b492f7b8393c6cfda56f90a83f9a4cc819419
 
 // ============================================================
 // 18. RÉINITIALISATION DE MOT DE PASSE
@@ -636,7 +943,7 @@ const sendEntretienRejectedEmail = async (email, membre, entretien) => {
 const sendForgotPasswordCode = async (email, prenom, nom, code) => {
   const subject = 'Réinitialisation de mot de passe - JCI Sidi Mansour';
   const html = emailLayout('Réinitialisation', `
-    <p style="${STYLES.greeting}">Bonjour <strong>${prenom} ${nom}</strong>,</p>
+    <p style="${STYLES.greeting}">Bonjour <strong>${escapeHtml(prenom)} ${escapeHtml(nom)}</strong>,</p>
     <p style="${STYLES.paragraph}">Vous avez demandé la réinitialisation de votre mot de passe. Utilisez le code ci-dessous :</p>
     <div style="text-align: center; margin: 24px 0;">
       <div style="font-size: 28px; font-weight: 700; letter-spacing: 8px; color: #3A67B1; background: #eef2ff; padding: 16px 24px; border-radius: 8px; display: inline-block; font-family: 'Courier New', monospace;">
@@ -664,7 +971,7 @@ const sendContactNotificationToPresident = async (presidentEmail, contact) => {
     </div>
     <div style="background: #ffffff; border-radius: 8px; padding: 16px; margin: 16px 0; border: 1px solid #e2e8f0;">
       <h3 style="color: #3A67B1; margin: 0 0 10px 0; font-size: 14px; font-weight: 600;">${SVG.clipboard} Message :</h3>
-      <p style="color: #475569; font-size: 14px; line-height: 1.6; white-space: pre-wrap; margin: 0;">${contact.message}</p>
+      <p style="color: #475569; font-size: 14px; line-height: 1.6; white-space: pre-wrap; margin: 0;">${escapeHtml(contact.message)}</p>
     </div>
     <div style="text-align: center; margin: 20px 0;">
       <a href="${FRONTEND_URL}/president/contacts" style="${STYLES.btn} ${STYLES.btnPrimary}">Voir les messages</a>
